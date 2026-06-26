@@ -1,0 +1,737 @@
+     1→     1→// KTV 出品系统 — 4 部门出单看板 + 已出品查询 + 房态缩略
+     2→     2→"use client";
+     3→     3→
+     4→     4→import { useCallback, useEffect, useMemo, useState } from "react";
+     5→     5→import {
+     6→     6→  RefreshCw,
+     7→     7→  Wine,
+     8→     8→  ChefHat,
+     9→     9→  Cherry,
+    10→    10→  ShoppingBag,
+    11→    11→  CheckCircle2,
+    12→    12→  Printer,
+    13→    13→  Clock,
+    14→    14→  Receipt,
+    15→    15→  Eye,
+    16→    16→  Gift,
+    17→    17→} from "lucide-react";
+    18→    18→import { Button } from "@/components/ui/button";
+    19→    19→import { Badge } from "@/components/ui/badge";
+    20→    20→import {
+    21→    21→  Dialog,
+    22→    22→  DialogContent,
+    23→    23→  DialogDescription,
+    24→    24→  DialogHeader,
+    25→    25→  DialogTitle,
+    26→    26→} from "@/components/ui/dialog";
+    27→    27→import { ScrollArea } from "@/components/ui/scroll-area";
+    28→    28→import { Skeleton } from "@/components/ui/skeleton";
+    29→    29→import {
+    30→    30→  Tabs,
+    31→    31→  TabsList,
+    32→    32→  TabsTrigger,
+    33→    33→  TabsContent,
+    34→    34→} from "@/components/ui/tabs";
+    35→    35→import { cn } from "@/lib/utils";
+    36→    36→import { api } from "@/lib/api";
+    37→    37→import type {
+    38→    38→  KtvRoomInfoV2,
+    39→    39→  KtvOrderInfoV2,
+    40→    40→  KtvOrderItemInfoV2,
+    41→    41→  ProductInfo,
+    42→    42→  SysConfigInfo,
+    43→    43→  RoomStatusColors,
+    44→    44→} from "@/lib/types";
+    45→    45→import { useToast } from "@/hooks/use-toast";
+    46→    46→import { yuan, relTime, fullTime } from "@/components/common/format";
+    47→    47→
+    48→    48→// 默认房态颜色（与 CashierModule 一致）
+    49→    49→const DEFAULT_STATUS_COLORS: RoomStatusColors = {
+    50→    50→  idle: "#10b981",
+    51→    51→  reserved: "#3b82f6",
+    52→    52→  seated: "#f59e0b",
+    53→    53→  in_use: "#ef4444",
+    54→    54→  cleaning: "#a855f7",
+    55→    55→  maintenance: "#6b7280",
+    56→    56→};
+    57→    57→
+    58→    58→const STATUS_LABEL: Record<keyof RoomStatusColors, string> = {
+    59→    59→  idle: "空闲",
+    60→    60→  reserved: "预订",
+    61→    61→  seated: "带位",
+    62→    62→  in_use: "使用中",
+    63→    63→  cleaning: "清扫",
+    64→    64→  maintenance: "维修",
+    65→    65→};
+    66→    66→
+    67→    67→type Dept = "bar" | "kitchen" | "fruit" | "outside";
+    68→    68→
+    69→    69→const DEPT_META: Record<Dept, { label: string; icon: React.ReactNode; color: string }> = {
+    70→    70→  bar: { label: "吧台", icon: <Wine className="h-4 w-4" />, color: "#f59e0b" },
+    71→    71→  kitchen: { label: "厨房", icon: <ChefHat className="h-4 w-4" />, color: "#ef4444" },
+    72→    72→  fruit: { label: "水果房", icon: <Cherry className="h-4 w-4" />, color: "#10b981" },
+    73→    73→  outside: { label: "外卖", icon: <ShoppingBag className="h-4 w-4" />, color: "#3b82f6" },
+    74→    74→};
+    75→    75→
+    76→    76→function parseFlavors(flavors: string | null): Array<{ category: string; flavor: string }> {
+    77→    77→  if (!flavors) return [];
+    78→    78→  try {
+    79→    79→    const parsed = JSON.parse(flavors);
+    80→    80→    return Array.isArray(parsed) ? parsed : [];
+    81→    81→  } catch {
+    82→    82→    return [];
+    83→    83→  }
+    84→    84→}
+    85→    85→
+    86→    86→function flavorText(flavors: string | null): string {
+    87→    87→  const list = parseFlavors(flavors);
+    88→    88→  if (list.length === 0) return "";
+    89→    89→  return list.map((f) => f.flavor).join("/");
+    90→    90→}
+    91→    91→
+    92→    92→// ============ 主组件 ============
+    93→    93→export function ProductionModule() {
+    94→    94→  const [rooms, setRooms] = useState<KtvRoomInfoV2[]>([]);
+    95→    95→  const [orders, setOrders] = useState<KtvOrderInfoV2[]>([]);
+    96→    96→  const [products, setProducts] = useState<ProductInfo[]>([]);
+    97→    97→  const [colors, setColors] = useState<RoomStatusColors>(DEFAULT_STATUS_COLORS);
+    98→    98→  const [loading, setLoading] = useState(true);
+    99→    99→  const [dept, setDept] = useState<Dept>("bar");
+   100→   100→  const [viewRoomOrder, setViewRoomOrder] = useState<KtvOrderInfoV2 | null>(null);
+   101→   101→  const { toast } = useToast();
+   102→   102→
+   103→   103→  const load = useCallback(async () => {
+   104→   104→    try {
+   105→   105→      const [r, o, cfgs] = await Promise.all([
+   106→   106→        api.getKtvRooms(),
+   107→   107→        api.getKtvOrders("open"),
+   108→   108→        api.getSysConfigs(),
+   109→   109→      ]);
+   110→   110→      setRooms(r);
+   111→   111→      setOrders(o);
+   112→   112→      const colorCfg = cfgs.find((c) => c.configKey === "room_status_colors");
+   113→   113→      if (colorCfg) {
+   114→   114→        try {
+   115→   115→          setColors({ ...DEFAULT_STATUS_COLORS, ...JSON.parse(colorCfg.configValue) });
+   116→   116→        } catch { /* ignore */ }
+   117→   117→      }
+   118→   118→    } catch (e) {
+   119→   119→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+   120→   120→    } finally {
+   121→   121→      setLoading(false);
+   122→   122→    }
+   123→   123→  }, [toast]);
+   124→   124→
+   125→   125→  // 商品图（仅在初次加载时拉取一次，用于出单卡缩略图）
+   126→   126→  useEffect(() => {
+   127→   127→    api.getProducts().then(setProducts).catch(() => {});
+   128→   128→  }, []);
+   129→   129→
+   130→   130→  // productId → imageUrl 映射
+   131→   131→  const productImageMap = useMemo(() => {
+   132→   132→    const m = new Map<string, string | null>();
+   133→   133→    for (const p of products) m.set(p.id, p.imageUrl);
+   134→   134→    return m;
+   135→   135→  }, [products]);
+   136→   136→
+   137→   137→  useEffect(() => {
+   138→   138→    load();
+   139→   139→    const t = setInterval(load, 15000);
+   140→   140→    return () => clearInterval(t);
+   141→   141→  }, [load]);
+   142→   142→
+   143→   143→  // 从所有 open 订单中提取 items，关联 roomNo
+   144→   144→  type ItemWithRoom = KtvOrderItemInfoV2 & { roomNo: string; roomType: string; customerName: string | null; openedAt: string };
+   145→   145→  const allItems: ItemWithRoom[] = useMemo(() => {
+   146→   146→    const list: ItemWithRoom[] = [];
+   147→   147→    for (const o of orders) {
+   148→   148→      for (const it of o.items ?? []) {
+   149→   149→        list.push({
+   150→   150→          ...it,
+   151→   151→          roomNo: o.roomNo,
+   152→   152→          roomType: o.roomType,
+   153→   153→          customerName: o.customerName,
+   154→   154→          openedAt: o.openedAt,
+   155→   155→        });
+   156→   156→      }
+   157→   157→    }
+   158→   158→    return list;
+   159→   159→  }, [orders]);
+   160→   160→
+   161→   161→  // 按部门 + 状态过滤
+   162→   162→  const pendingItems = useMemo(() => {
+   163→   163→    return allItems
+   164→   164→      .filter((it) => it.outputDept === dept && (it.status === "pending" || it.status === "printed"))
+   165→   165→      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+   166→   166→  }, [allItems, dept]);
+   167→   167→
+   168→   168→  const deliveredItems = useMemo(() => {
+   169→   169→    return allItems
+   170→   170→      .filter((it) => it.outputDept === dept && it.status === "delivered")
+   171→   171→      .sort((a, b) => new Date(b.deliveredAt ?? b.createdAt).getTime() - new Date(a.deliveredAt ?? a.createdAt).getTime());
+   172→   172→  }, [allItems, dept]);
+   173→   173→
+   174→   174→  // 统计
+   175→   175→  const stats = useMemo(() => {
+   176→   176→    const pending = allItems.filter((it) => it.status === "pending" || it.status === "printed").length;
+   177→   177→    const delivered = allItems.filter((it) => it.status === "delivered").length;
+   178→   178→    // 今日出品总数 = 所有 delivered 中 deliveredAt 是今天的
+   179→   179→    const today = new Date().toDateString();
+   180→   180→    const todayDelivered = allItems.filter(
+   181→   181→      (it) => it.deliveredAt && new Date(it.deliveredAt).toDateString() === today,
+   182→   182→    ).length;
+   183→   183→    return { pending, delivered, todayDelivered };
+   184→   184→  }, [allItems]);
+   185→   185→
+   186→   186→  // 房态分组（按区域）
+   187→   187→  const groupedRooms = useMemo(() => {
+   188→   188→    const g: Record<string, KtvRoomInfoV2[]> = {};
+   189→   189→    for (const r of rooms) {
+   190→   190→      const key = r.area || "未分区";
+   191→   191→      (g[key] ??= []).push(r);
+   192→   192→    }
+   193→   193→    return g;
+   194→   194→  }, [rooms]);
+   195→   195→
+   196→   196→  const handleDeliver = async (item: ItemWithRoom) => {
+   197→   197→    // 找到所属订单
+   198→   198→    const order = orders.find((o) => o.id === item.orderId);
+   199→   199→    if (!order) return;
+   200→   200→    try {
+   201→   201→      await api.deliverItem(order.id, item.id);
+   202→   202→      toast({
+   203→   203→        title: "已出单送达",
+   204→   204→        description: `${item.roomNo} · ${item.productName} x${item.qty}`,
+   205→   205→      });
+   206→   206→      load();
+   207→   207→    } catch (e) {
+   208→   208→      toast({ title: "出单失败", description: String(e), variant: "destructive" });
+   209→   209→    }
+   210→   210→  };
+   211→   211→
+   212→   212→  const handleReprint = (item: ItemWithRoom) => {
+   213→   213→    toast({
+   214→   214→      title: "已重新打印小票",
+   215→   215→      description: `${item.roomNo} · ${item.productName} x${item.qty} · ${flavorText(item.flavors) || "无口味"}`,
+   216→   216→    });
+   217→   217→  };
+   218→   218→
+   219→   219→  return (
+   220→   220→    <div className="min-h-screen bg-slate-900 text-slate-100 -m-4 sm:-m-6 p-4 sm:p-6">
+   221→   221→      {/* 顶部 KPI */}
+   222→   222→      <div className="grid gap-3 grid-cols-3 mb-5">
+   223→   223→        <KpiCard title="待出品" value={stats.pending} loading={loading} color="#f59e0b" icon={<Clock className="h-4 w-4" />} />
+   224→   224→        <KpiCard title="已出品" value={stats.delivered} loading={loading} color="#10b981" icon={<CheckCircle2 className="h-4 w-4" />} />
+   225→   225→        <KpiCard title="今日出品总数" value={stats.todayDelivered} loading={loading} color="#3b82f6" icon={<Receipt className="h-4 w-4" />} />
+   226→   226→      </div>
+   227→   227→      {/* 顶部装饰条 — 4 个部门彩色图标 */}
+   228→   228→      <div className="flex flex-wrap items-center gap-2 mb-5 bg-slate-800/60 rounded-xl p-2 border border-slate-700/50">
+   229→   229→        <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-slate-500 ml-1 mr-1">出品部门</span>
+   230→   230→        {(Object.keys(DEPT_META) as Dept[]).map((d) => (
+   231→   231→          <span
+   232→   232→            key={d}
+   233→   233→            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-900/70 border border-slate-700/60"
+   234→   234→          >
+   235→   235→            <span
+   236→   236→              className="flex h-5 w-5 items-center justify-center rounded-md"
+   237→   237→              style={{ backgroundColor: `${DEPT_META[d].color}22`, color: DEPT_META[d].color }}
+   238→   238→            >
+   239→   239→              {DEPT_META[d].icon}
+   240→   240→            </span>
+   241→   241→            <span className="text-xs text-slate-300">{DEPT_META[d].label}</span>
+   242→   242→          </span>
+   243→   243→        ))}
+   244→   244→      </div>
+   245→   245→
+   246→   246→      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+   247→   247→        {/* 左：房态缩略 */}
+   248→   248→        <div className="lg:col-span-1 bg-slate-800 rounded-xl p-3 border border-slate-700/50">
+   249→   249→          <div className="flex items-center justify-between mb-3">
+   250→   250→            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+   251→   251→              <Eye className="h-4 w-4 text-emerald-400" /> 房态缩略
+   252→   252→            </h3>
+   253→   253→            <Button size="sm" variant="ghost" onClick={load} className="h-7 w-7 p-0 text-slate-300 hover:bg-slate-700">
+   254→   254→              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+   255→   255→            </Button>
+   256→   256→          </div>
+   257→   257→          <ScrollArea className="max-h-[70vh]">
+   258→   258→            {loading ? (
+   259→   259→              <div className="space-y-2">
+   260→   260→                {Array.from({ length: 6 }).map((_, i) => (
+   261→   261→                  <Skeleton key={i} className="h-10 bg-slate-700" />
+   262→   262→                ))}
+   263→   263→              </div>
+   264→   264→            ) : (
+   265→   265→              <div className="space-y-3">
+   266→   266→                {Object.entries(groupedRooms).map(([area, list]) => (
+   267→   267→                  <div key={area}>
+   268→   268→                    <div className="text-[10px] text-slate-500 mb-1.5 px-0.5">{area}</div>
+   269→   269→                    <div className="grid grid-cols-2 gap-1.5">
+   270→   270→                      {list.map((r) => (
+   271→   271→                        <MiniRoomBlock
+   272→   272→                          key={r.id}
+   273→   273→                          room={r}
+   274→   274→                          colors={colors}
+   275→   275→                          onClick={() => {
+   276→   276→                            const o = orders.find((x) => x.id === r.currentOrderId);
+   277→   277→                            if (o) setViewRoomOrder(o);
+   278→   278→                            else toast({ title: `${r.roomNo} 当前无消费`, description: STATUS_LABEL[r.status] });
+   279→   279→                          }}
+   280→   280→                        />
+   281→   281→                      ))}
+   282→   282→                    </div>
+   283→   283→                  </div>
+   284→   284→                ))}
+   285→   285→              </div>
+   286→   286→            )}
+   287→   287→          </ScrollArea>
+   288→   288→        </div>
+   289→   289→
+   290→   290→        {/* 右：出单看板 */}
+   291→   291→        <div className="lg:col-span-3">
+   292→   292→          {/* 部门切换 */}
+   293→   293→          <div className="bg-slate-800 rounded-xl p-2 mb-4 border border-slate-700/50">
+   294→   294→            <Tabs value={dept} onValueChange={(v) => setDept(v as Dept)}>
+   295→   295→              <TabsList className="bg-slate-900 border border-slate-700 grid grid-cols-4 w-full">
+   296→   296→                {(Object.keys(DEPT_META) as Dept[]).map((d) => {
+   297→   297→                  const cnt = allItems.filter((it) => it.outputDept === d && (it.status === "pending" || it.status === "printed")).length;
+   298→   298→                  return (
+   299→   299→                    <TabsTrigger key={d} value={d} className="data-[state=active]:bg-slate-700 gap-1.5 relative">
+   300→   300→                      <span style={{ color: DEPT_META[d].color }}>{DEPT_META[d].icon}</span>
+   301→   301→                      <span>{DEPT_META[d].label}</span>
+   302→   302→                      {cnt > 0 && (
+   303→   303→                        <span className="ml-1 text-[10px] bg-rose-600 text-white rounded-full px-1.5 py-0.5 font-bold tabular-nums">
+   304→   304→                          {cnt}
+   305→   305→                        </span>
+   306→   306→                      )}
+   307→   307→                    </TabsTrigger>
+   308→   308→                  );
+   309→   309→                })}
+   310→   310→              </TabsList>
+   311→   311→
+   312→   312→              {(Object.keys(DEPT_META) as Dept[]).map((d) => (
+   313→   313→                <TabsContent key={d} value={d} className="mt-4">
+   314→   314→                  {d !== dept ? null : (
+   315→   315→                    <div className="space-y-4">
+   316→   316→                      {/* 待出品看板 */}
+   317→   317→                      <div>
+   318→   318→                        <div className="flex items-center gap-2 mb-2.5">
+   319→   319→                          <Clock className="h-4 w-4 text-amber-400" />
+   320→   320→                          <h3 className="text-sm font-semibold text-amber-300">
+   321→   321→                            待出品 · {DEPT_META[dept].label}
+   322→   322→                          </h3>
+   323→   323→                          <Badge variant="outline" className="border-amber-700/50 text-amber-300 bg-amber-950/30">
+   324→   324→                            {pendingItems.length} 单
+   325→   325→                          </Badge>
+   326→   326→                        </div>
+   327→   327→                        {pendingItems.length === 0 ? (
+   328→   328→                          <EmptyState text="暂无待出品订单" />
+   329→   329→                        ) : (
+   330→   330→                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+   331→   331→                            {pendingItems.map((it) => (
+   332→   332→                              <ProductionCard
+   333→   333→                                key={it.id}
+   334→   334→                                item={it}
+   335→   335→                                dept={dept}
+   336→   336→                                deptColor={DEPT_META[dept].color}
+   337→   337→                                imageUrl={productImageMap.get(it.productId) ?? null}
+   338→   338→                                onDeliver={() => handleDeliver(it)}
+   339→   339→                              />
+   340→   340→                            ))}
+   341→   341→                          </div>
+   342→   342→                        )}
+   343→   343→                      </div>
+   344→   344→
+   345→   345→                      {/* 已出品 */}
+   346→   346→                      <div>
+   347→   347→                        <div className="flex items-center gap-2 mb-2.5">
+   348→   348→                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+   349→   349→                          <h3 className="text-sm font-semibold text-emerald-300">
+   350→   350→                            已出品查询
+   351→   351→                          </h3>
+   352→   352→                          <Badge variant="outline" className="border-emerald-700/50 text-emerald-300 bg-emerald-950/30">
+   353→   353→                            {deliveredItems.length} 单
+   354→   354→                          </Badge>
+   355→   355→                        </div>
+   356→   356→                        {deliveredItems.length === 0 ? (
+   357→   357→                          <EmptyState text="暂无已出品记录" />
+   358→   358→                        ) : (
+   359→   359→                          <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 overflow-hidden">
+   360→   360→                            <ScrollArea className="max-h-72">
+   361→   361→                              <table className="w-full text-xs">
+   362→   362→                                <thead className="bg-slate-900/80 sticky top-0">
+   363→   363→                                  <tr className="text-slate-400">
+   364→   364→                                    <th className="text-left font-medium px-3 py-2">房号</th>
+   365→   365→                                    <th className="text-left font-medium px-3 py-2">商品</th>
+   366→   366→                                    <th className="text-left font-medium px-3 py-2">口味</th>
+   367→   367→                                    <th className="text-right font-medium px-3 py-2">数量</th>
+   368→   368→                                    <th className="text-left font-medium px-3 py-2">送达时间</th>
+   369→   369→                                    <th className="text-right font-medium px-3 py-2">操作</th>
+   370→   370→                                  </tr>
+   371→   371→                                </thead>
+   372→   372→                                <tbody>
+   373→   373→                                  {deliveredItems.map((it) => (
+   374→   374→                                    <tr key={it.id} className="border-t border-slate-700/50 hover:bg-slate-800">
+   375→   375→                                      <td className="px-3 py-2 font-medium text-slate-100">{it.roomNo}</td>
+   376→   376→                                      <td className="px-3 py-2 text-slate-200">
+   377→   377→                                        <div className="flex items-center gap-2">
+   378→   378→                                          <DeliveredThumb imageUrl={productImageMap.get(it.productId) ?? null} alt={it.productName} />
+   379→   379→                                          <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+   380→   380→                                          <span className="truncate">
+   381→   381→                                            {it.productName}
+   382→   382→                                            {it.isGift && <Gift className="inline h-3 w-3 ml-1 text-pink-400" />}
+   383→   383→                                          </span>
+   384→   384→                                        </div>
+   385→   385→                                      </td>
+   386→   386→                                      <td className="px-3 py-2 text-amber-300">{flavorText(it.flavors) || "—"}</td>
+   387→   387→                                      <td className="px-3 py-2 text-right text-slate-200 font-medium">x{it.qty}</td>
+   388→   388→                                      <td className="px-3 py-2 text-slate-400">{relTime(it.deliveredAt)}</td>
+   389→   389→                                      <td className="px-3 py-2 text-right">
+   390→   390→                                        <Button
+   391→   391→                                          size="sm"
+   392→   392→                                          variant="ghost"
+   393→   393→                                          className="h-7 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+   394→   394→                                          onClick={() => handleReprint(it)}
+   395→   395→                                        >
+   396→   396→                                          <Printer className="h-3.5 w-3.5 mr-1" /> 重打
+   397→   397→                                        </Button>
+   398→   398→                                      </td>
+   399→   399→                                    </tr>
+   400→   400→                                  ))}
+   401→   401→                                </tbody>
+   402→   402→                              </table>
+   403→   403→                            </ScrollArea>
+   404→   404→                          </div>
+   405→   405→                        )}
+   406→   406→                      </div>
+   407→   407→                    </div>
+   408→   408→                  )}
+   409→   409→                </TabsContent>
+   410→   410→              ))}
+   411→   411→            </Tabs>
+   412→   412→          </div>
+   413→   413→        </div>
+   414→   414→      </div>
+   415→   415→
+   416→   416→      {/* 房间消费明细弹窗 */}
+   417→   417→      <RoomOrderDialog
+   418→   418→        order={viewRoomOrder}
+   419→   419→        colors={colors}
+   420→   420→        onClose={() => setViewRoomOrder(null)}
+   421→   421→      />
+   422→   422→    </div>
+   423→   423→  );
+   424→   424→}
+   425→   425→
+   426→   426→// ============ KPI 卡 ============
+   427→   427→function KpiCard({
+   428→   428→  title, value, loading, color, icon,
+   429→   429→}: {
+   430→   430→  title: string;
+   431→   431→  value: number | string;
+   432→   432→  loading?: boolean;
+   433→   433→  color?: string;
+   434→   434→  icon?: React.ReactNode;
+   435→   435→}) {
+   436→   436→  return (
+   437→   437→    <div
+   438→   438→      className="relative overflow-hidden rounded-xl p-4 border border-slate-700/50 bg-slate-800"
+   439→   439→      style={color ? { boxShadow: `inset 0 0 0 1px ${color}22` } : undefined}
+   440→   440→    >
+   441→   441→      <div className="flex items-center justify-between">
+   442→   442→        <div className="text-xs text-slate-400">{title}</div>
+   443→   443→        {icon && color && (
+   444→   444→          <div
+   445→   445→            className="flex h-8 w-8 items-center justify-center rounded-lg"
+   446→   446→            style={{ backgroundColor: `${color}22`, color }}
+   447→   447→          >
+   448→   448→            {icon}
+   449→   449→          </div>
+   450→   450→        )}
+   451→   451→      </div>
+   452→   452→      {loading ? (
+   453→   453→        <Skeleton className="h-8 w-16 mt-1.5 bg-slate-700" />
+   454→   454→      ) : (
+   455→   455→        <div
+   456→   456→          className="text-3xl font-extrabold mt-1 tabular-nums"
+   457→   457→          style={color ? { color } : undefined}
+   458→   458→        >
+   459→   459→          {value}
+   460→   460→        </div>
+   461→   461→      )}
+   462→   462→    </div>
+   463→   463→  );
+   464→   464→}
+   465→   465→
+   466→   466→// ============ 迷你房态块 ============
+   467→   467→function MiniRoomBlock({
+   468→   468→  room, colors, onClick,
+   469→   469→}: {
+   470→   470→  room: KtvRoomInfoV2;
+   471→   471→  colors: RoomStatusColors;
+   472→   472→  onClick: () => void;
+   473→   473→}) {
+   474→   474→  const color = colors[room.status] ?? "#6b7280";
+   475→   475→  const elapsed = room.openedAt
+   476→   476→    ? Math.floor((Date.now() - new Date(room.openedAt).getTime()) / 60000)
+   477→   477→    : 0;
+   478→   478→  return (
+   479→   479→    <button
+   480→   480→      onClick={onClick}
+   481→   481→      className="text-left rounded-lg p-1.5 min-h-[56px] h-full flex flex-col transition-all hover:scale-[1.04] focus:outline-none focus:ring-2 focus:ring-white/40"
+   482→   482→      style={{ backgroundColor: color, boxShadow: `0 2px 6px ${color}40` }}
+   483→   483→      title={`${room.roomNo} · ${room.roomName} · ${STATUS_LABEL[room.status]}`}
+   484→   484→    >
+   485→   485→      <div className="flex items-center justify-between">
+   486→   486→        <span className="text-white font-bold text-sm drop-shadow">{room.roomNo}</span>
+   487→   487→        {room.status === "in_use" && (
+   488→   488→          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+   489→   489→        )}
+   490→   490→      </div>
+   491→   491→      {room.status === "in_use" && (
+   492→   492→        <div className="text-[9px] text-white/90 mt-0.5">{elapsed}分</div>
+   493→   493→      )}
+   494→   494→      {room.currentOrder && room.currentOrder.productFee > 0 && (
+   495→   495→        <div className="text-[9px] text-white/95 font-medium leading-none mt-0.5">
+   496→   496→          {yuan(room.currentOrder.productFee)}
+   497→   497→        </div>
+   498→   498→      )}
+   499→   499→    </button>
+   500→   500→  );
+   501→   501→}
+   502→   502→
+   503→   503→// ============ 出单品卡片（外卖接单屏样式） ============
+   504→   504→function ProductionCard({
+   505→   505→  item, dept, deptColor, imageUrl, onDeliver,
+   506→   506→}: {
+   507→   507→  item: KtvOrderItemInfoV2 & { roomNo: string; customerName: string | null };
+   508→   508→  dept: Dept;
+   509→   509→  deptColor: string;
+   510→   510→  imageUrl: string | null;
+   511→   511→  onDeliver: () => void;
+   512→   512→}) {
+   513→   513→  const flavors = flavorText(item.flavors);
+   514→   514→  const elapsed = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 60000);
+   515→   515→  const isUrgent = elapsed > 10;
+   516→   516→  const isPrinted = item.status === "printed";
+   517→   517→  const deptMeta = DEPT_META[dept];
+   518→   518→
+   519→   519→  return (
+   520→   520→    <div
+   521→   521→      className="relative bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-slate-500 transition-colors"
+   522→   522→      style={{ borderLeft: `4px solid ${deptColor}` }}
+   523→   523→    >
+   524→   524→      <div className="p-3">
+   525→   525→        <div className="flex items-start justify-between mb-1.5">
+   526→   526→          <div className="flex items-start gap-2 min-w-0">
+   527→   527→            {/* 部门图标色块 */}
+   528→   528→            <span
+   529→   529→              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+   530→   530→              style={{ backgroundColor: `${deptColor}22`, color: deptColor }}
+   531→   531→            >
+   532→   532→              {deptMeta.icon}
+   533→   533→            </span>
+   534→   534→            <div className="min-w-0">
+   535→   535→              <div className="flex items-center gap-1.5">
+   536→   536→                <span className="text-lg font-extrabold text-slate-100">{item.roomNo}</span>
+   537→   537→                {item.customerName && (
+   538→   538→                  <span className="text-[11px] text-slate-400 truncate max-w-20">{item.customerName}</span>
+   539→   539→                )}
+   540→   540→              </div>
+   541→   541→              <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+   542→   542→                <Clock className="h-2.5 w-2.5" />
+   543→   543→                {new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+   544→   544→                <span className={isUrgent ? "text-rose-400 font-bold ml-1" : "text-slate-500 ml-1"}>
+   545→   545→                  · {elapsed}分前
+   546→   546→                </span>
+   547→   547→              </div>
+   548→   548→            </div>
+   549→   549→          </div>
+   550→   550→          {isPrinted ? (
+   551→   551→            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] gap-0.5">
+   552→   552→              <CheckCircle2 className="h-2.5 w-2.5" /> 已打单
+   553→   553→            </Badge>
+   554→   554→          ) : (
+   555→   555→            <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-[10px] gap-0.5">
+   556→   556→              <Clock className="h-2.5 w-2.5" /> 待出
+   557→   557→            </Badge>
+   558→   558→          )}
+   559→   559→        </div>
+   560→   560→
+   561→   561→        <div className="bg-slate-900 rounded p-2 mb-2">
+   562→   562→          <div className="flex items-center justify-between gap-2">
+   563→   563→            <div className="text-slate-100 font-medium text-sm flex items-center gap-2 min-w-0">
+   564→   564→              {/* 商品缩略图 40x40 */}
+   565→   565→              <CardThumb imageUrl={imageUrl} alt={item.productName} />
+   566→   566→              <span className="flex items-center gap-1 truncate">
+   567→   567→                {item.isGift && <Gift className="h-3.5 w-3.5 text-pink-400 shrink-0" />}
+   568→   568→                <span className="truncate">{item.productName}</span>
+   569→   569→              </span>
+   570→   570→            </div>
+   571→   571→            <div className="flex items-baseline gap-1 shrink-0">
+   572→   572→              <span className="text-[10px] text-slate-500">x</span>
+   573→   573→              <span className="text-2xl font-extrabold text-emerald-400 leading-none">{item.qty}</span>
+   574→   574→            </div>
+   575→   575→          </div>
+   576→   576→          {flavors && (
+   577→   577→            <div className="mt-1 flex flex-wrap gap-1">
+   578→   578→              {flavors.split("/").map((f, i) => (
+   579→   579→                <span key={i} className="text-[10px] bg-amber-950/40 text-amber-300 border border-amber-700/40 rounded px-1.5 py-0.5">
+   580→   580→                  {f}
+   581→   581→                </span>
+   582→   582→              ))}
+   583→   583→            </div>
+   584→   584→          )}
+   585→   585→        </div>
+   586→   586→
+   587→   587→        <Button
+   588→   588→          onClick={onDeliver}
+   589→   589→          className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+   590→   590→        >
+   591→   591→          <CheckCircle2 className="h-4 w-4 mr-1" />
+   592→   592→          出单送达
+   593→   593→        </Button>
+   594→   594→      </div>
+   595→   595→      {isUrgent && (
+   596→   596→        <div className="absolute top-0 right-0 w-0 h-0 border-t-[20px] border-l-[20px] border-t-rose-500 border-l-transparent" />
+   597→   597→      )}
+   598→   598→    </div>
+   599→   599→  );
+   600→   600→}
+   601→   601→
+   602→   602→// ============ 商品缩略图（40x40 圆角，无图隐藏） ============
+   603→   603→function CardThumb({ imageUrl, alt }: { imageUrl: string | null; alt: string }) {
+   604→   604→  const [err, setErr] = useState(false);
+   605→   605→  if (!imageUrl || err) return null;
+   606→   606→  return (
+   607→   607→    <img
+   608→   608→      src={imageUrl}
+   609→   609→      alt={alt}
+   610→   610→      loading="lazy"
+   611→   611→      onError={() => setErr(true)}
+   612→   612→      className="h-10 w-10 rounded-md object-cover ring-1 ring-white/10 shrink-0"
+   613→   613→    />
+   614→   614→  );
+   615→   615→}
+   616→   616→
+   617→   617→// ============ 已出品表行缩略图（28x28，无图隐藏） ============
+   618→   618→function DeliveredThumb({ imageUrl, alt }: { imageUrl: string | null; alt: string }) {
+   619→   619→  const [err, setErr] = useState(false);
+   620→   620→  if (!imageUrl || err) return null;
+   621→   621→  return (
+   622→   622→    <img
+   623→   623→      src={imageUrl}
+   624→   624→      alt={alt}
+   625→   625→      loading="lazy"
+   626→   626→      onError={() => setErr(true)}
+   627→   627→      className="h-7 w-7 rounded-md object-cover ring-1 ring-white/10 shrink-0"
+   628→   628→    />
+   629→   629→  );
+   630→   630→}
+   631→   631→
+   632→   632→// ============ 空状态 ============
+   633→   633→function EmptyState({ text }: { text: string }) {
+   634→   634→  return (
+   635→   635→    <div className="bg-slate-800/30 border border-dashed border-slate-700 rounded-lg p-8 text-center">
+   636→   636→      <ShoppingBag className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+   637→   637→      <div className="text-sm text-slate-500">{text}</div>
+   638→   638→    </div>
+   639→   639→  );
+   640→   640→}
+   641→   641→
+   642→   642→// ============ 房间消费明细弹窗 ============
+   643→   643→function RoomOrderDialog({
+   644→   644→  order, colors, onClose,
+   645→   645→}: {
+   646→   646→  order: KtvOrderInfoV2 | null;
+   647→   647→  colors: RoomStatusColors;
+   648→   648→  onClose: () => void;
+   649→   649→}) {
+   650→   650→  if (!order) return null;
+   651→   651→  const elapsed = Math.max(1, Math.ceil((Date.now() - new Date(order.openedAt).getTime()) / 60000));
+   652→   652→  const roomFee = Math.round(order.hourlyRate * (elapsed / 60) * 100) / 100;
+   653→   653→
+   654→   654→  return (
+   655→   655→    <Dialog open={!!order} onOpenChange={(v) => !v && onClose()}>
+   656→   656→      <DialogContent className="max-w-lg bg-slate-800 border-slate-700 text-slate-100">
+   657→   657→        <DialogHeader>
+   658→   658→          <DialogTitle className="flex items-center gap-2">
+   659→   659→            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors.in_use }} />
+   660→   660→            {order.roomNo} · {order.orderNo}
+   661→   661→          </DialogTitle>
+   662→   662→          <DialogDescription className="text-slate-400">
+   663→   663→            {order.customerName || "散客"} · {order.customerCount} 人 · {relTime(order.openedAt)} 开台
+   664→   664→            {order.bookingManagerName ? ` · 经理 ${order.bookingManagerName}` : ""}
+   665→   665→          </DialogDescription>
+   666→   666→        </DialogHeader>
+   667→   667→        <div className="space-y-2">
+   668→   668→          <div className="grid grid-cols-3 gap-2 text-xs">
+   669→   669→            <Stat label="已用时" value={`${elapsed} 分`} />
+   670→   670→            <Stat label="包厢费" value={yuan(roomFee)} />
+   671→   671→            <Stat label="商品费" value={yuan(order.productFee)} />
+   672→   672→          </div>
+   673→   673→          <div className="bg-slate-900 rounded-lg p-2 max-h-80 overflow-y-auto">
+   674→   674→            <div className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
+   675→   675→              <Receipt className="h-3.5 w-3.5" /> 消费明细（{order.items?.length ?? 0} 项）
+   676→   676→            </div>
+   677→   677→            {order.items && order.items.length > 0 ? (
+   678→   678→              <div className="space-y-1">
+   679→   679→                {order.items.map((it) => (
+   680→   680→                  <div key={it.id} className="flex items-center gap-2 text-xs py-1 border-b border-slate-700/50">
+   681→   681→                    <div className="flex-1 min-w-0">
+   682→   682→                      <div className="text-slate-100 truncate">
+   683→   683→                        {it.productName}
+   684→   684→                        {it.isGift && <Gift className="inline h-3 w-3 ml-1 text-pink-400" />}
+   685→   685→                      </div>
+   686→   686→                      {it.flavors && (
+   687→   687→                        <div className="text-[10px] text-amber-300">{flavorText(it.flavors)}</div>
+   688→   688→                      )}
+   689→   689→                      <div className="text-[10px] text-slate-500">
+   690→   690→                        {relTime(it.createdAt)} · {deptLabel(it.outputDept)}
+   691→   691→                      </div>
+   692→   692→                    </div>
+   693→   693→                    <span className="text-slate-300 text-[11px]">x{it.qty}</span>
+   694→   694→                    <span className="text-emerald-400 font-medium w-14 text-right">{yuan(it.price * it.qty)}</span>
+   695→   695→                    <ItemStatusBadge status={it.status} />
+   696→   696→                  </div>
+   697→   697→                ))}
+   698→   698→              </div>
+   699→   699→            ) : (
+   700→   700→              <div className="text-xs text-slate-500 text-center py-3">暂无明细</div>
+   701→   701→            )}
+   702→   702→          </div>
+   703→   703→        </div>
+   704→   704→      </DialogContent>
+   705→   705→    </Dialog>
+   706→   706→  );
+   707→   707→}
+   708→   708→
+   709→   709→function Stat({ label, value }: { label: string; value: string }) {
+   710→   710→  return (
+   711→   711→    <div className="bg-slate-900 rounded p-2 text-center">
+   712→   712→      <div className="text-[10px] text-slate-500">{label}</div>
+   713→   713→      <div className="text-sm font-bold text-slate-100 mt-0.5">{value}</div>
+   714→   714→    </div>
+   715→   715→  );
+   716→   716→}
+   717→   717→
+   718→   718→function ItemStatusBadge({ status }: { status: string }) {
+   719→   719→  const map: Record<string, { label: string; cls: string }> = {
+   720→   720→    pending: { label: "待出", cls: "bg-rose-950/50 text-rose-300 border-rose-700/40" },
+   721→   721→    printed: { label: "已打单", cls: "bg-amber-950/50 text-amber-300 border-amber-700/40" },
+   722→   722→    delivered: { label: "已送达", cls: "bg-emerald-950/50 text-emerald-300 border-emerald-700/40" },
+   723→   723→    cancelled: { label: "已退", cls: "bg-slate-700 text-slate-400 border-slate-600" },
+   724→   724→  };
+   725→   725→  const m = map[status] ?? { label: status, cls: "bg-slate-700 text-slate-400" };
+   726→   726→  return (
+   727→   727→    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${m.cls}`}>{m.label}</span>
+   728→   728→  );
+   729→   729→}
+   730→   730→
+   731→   731→function deptLabel(dept: string): string {
+   732→   732→  const m: Record<string, string> = { bar: "吧台", kitchen: "厨房", fruit: "水果房", outside: "外卖" };
+   733→   733→  return m[dept] ?? dept;
+   734→   734→}
+   735→   735→
+   736→   736→// 重新导出图标避免未使用警告
+   737→   737→

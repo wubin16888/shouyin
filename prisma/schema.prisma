@@ -1,0 +1,692 @@
+// 云边协同餐饮 POS 系统 — Prisma schema (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 门店
+model Store {
+  id            String   @id @default(cuid())
+  storeId       Int      @unique // 业务门店ID，如 1001
+  storeName     String
+  storeToken    String   @unique
+  region        String   @default("华东")
+  status        Int      @default(1) // 1:正常 0:停用
+  wsStatus      String   @default("offline") // online/offline
+  lastConnectedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  configs        StoreConfig[]
+  configHistory  ConfigHistory[]
+  orders         Order[]
+  syncLogs       SyncLog[]
+  syncConflicts  SyncConflict[]
+  auditLogs      AuditLog[]
+  wsEvents       WebsocketEvent[]
+  rateLimit      StoreRateLimit?
+  dailyReports   ChainReportDaily[]
+  employees      Employee[]
+
+  @@index([region])
+  @@index([wsStatus])
+}
+
+/// 门店配置项
+model StoreConfig {
+  id           String   @id @default(cuid())
+  storeId      Int
+  store        Store    @relation(fields: [storeId], references: [storeId])
+  configKey    String
+  configValue  String   // JSON string
+  valueType    String   @default("string") // string/number/boolean/json
+  description  String?
+  version      Int      @default(1)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([storeId, configKey])
+  @@index([storeId])
+}
+
+/// 配置变更历史
+model ConfigHistory {
+  id             String   @id @default(cuid())
+  storeId        Int
+  store          Store    @relation(fields: [storeId], references: [storeId])
+  configKey      String
+  oldValue       String?  // JSON
+  newValue       String   // JSON
+  version        Int
+  operator       String   @default("admin")
+  isRollback     Boolean  @default(false)
+  sourceVersion  Int?
+  createdAt      DateTime @default(now())
+
+  @@index([storeId, configKey, version])
+  @@index([createdAt])
+}
+
+/// 门店级限流配置
+model StoreRateLimit {
+  storeId        Int      @id
+  store          Store    @relation(fields: [storeId], references: [storeId])
+  readPerSec     Int      @default(50)
+  writePerSec    Int      @default(20)
+  syncPerSec     Int      @default(10)
+  authPerSec     Int      @default(5)
+  burstAllowance Int      @default(3)
+  enabled        Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+/// 订单
+model Order {
+  id           String   @id @default(cuid())
+  orderId      Int      @unique
+  storeId      Int
+  store        Store    @relation(fields: [storeId], references: [storeId])
+  orderNo      String
+  totalAmount  Float
+  status       Int      @default(2) // 1:待支付 2:已支付 3:已取消
+  payMethod    String   @default("cash")
+  itemCount    Int      @default(0)
+  syncVersion  Int      @default(1)
+  items        String   @default("[]") // JSON
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId, createdAt])
+  @@index([status])
+}
+
+/// 同步日志
+model SyncLog {
+  id           String   @id @default(cuid())
+  storeId      Int
+  store        Store    @relation(fields: [storeId], references: [storeId])
+  syncType     String   @default("order") // order/config/member
+  status       String   @default("success") // success/failed/pending
+  recordCount  Int      @default(0)
+  durationMs   Int      @default(0)
+  errorMessage String?
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  @@index([storeId, startedAt])
+  @@index([status])
+}
+
+/// 同步冲突
+model SyncConflict {
+  id             String   @id @default(cuid())
+  storeId        Int
+  store          Store    @relation(fields: [storeId], references: [storeId])
+  orderId        Int
+  localVersion   Int
+  cloudVersion   Int
+  localData      String   // JSON
+  cloudData      String?  // JSON
+  conflictReason String?
+  resolveStatus  String   @default("pending") // pending/resolved
+  resolveMethod  String?  // local_wins/cloud_wins/merge
+  retryCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  resolvedAt     DateTime?
+
+  @@index([storeId, resolveStatus])
+}
+
+/// 审计日志
+model AuditLog {
+  id            String   @id @default(cuid())
+  storeId       Int
+  store         Store    @relation(fields: [storeId], references: [storeId])
+  userId        String?
+  userName      String   @default("system")
+  operationType String   // config.update / order.create / store.toggle ...
+  resourceType  String?
+  resourceId    String?
+  changes       String?  // JSON
+  status        String   @default("success") // success/failed
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([operationType])
+}
+
+/// WebSocket 连接事件
+model WebsocketEvent {
+  id              String   @id @default(cuid())
+  storeId         Int
+  store           Store    @relation(fields: [storeId], references: [storeId])
+  eventType       String   // connect/disconnect/reconnect
+  clientIp        String?
+  sessionDuration Int?
+  pendingMessages Int      @default(0)
+  reason          String?
+  createdAt       DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([eventType])
+}
+
+/// 连锁日报
+model ChainReportDaily {
+  id                 String   @id @default(cuid())
+  reportDate         DateTime
+  storeId            Int
+  store              Store    @relation(fields: [storeId], references: [storeId])
+  totalOrders        Int      @default(0)
+  totalRevenue       Float    @default(0)
+  avgOrderValue      Float    @default(0)
+  totalRefunds       Int      @default(0)
+  totalDiscountAmount Float   @default(0)
+  memberCardPayments Int      @default(0)
+  memberCardAmount   Float    @default(0)
+
+  @@unique([reportDate, storeId])
+  @@index([reportDate])
+}
+
+/// 菜品（POS 演示）
+model Dish {
+  id        String   @id @default(cuid())
+  storeId   Int      @default(1001)
+  name      String
+  category  String
+  price     Float
+  status    Int      @default(1) // 1:在售 0:停售
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  @@index([storeId, category])
+}
+
+// ========================================
+// KTV 业务模型（动态配置版）
+// ========================================
+
+/// 系统配置（key-value，存储所有营业参数）
+model SysConfig {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  configKey   String
+  configValue String   // JSON 字符串
+  category    String   @default("system") // system:系统参数 / room:房态 / display:显示 / theme:主题
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storeId, configKey])
+  @@index([storeId, category])
+}
+
+/// 菜品大类（动态，管理员自定义）
+model ProductCategory {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  name        String   // 大类名：酒水/饮料/零食/水果/套餐...
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  subcategories ProductSubcategory[]
+  products      Product[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+/// 菜品小类（动态）
+model ProductSubcategory {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  categoryId  String
+  category    ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String   // 小类名：常温/冰/热菜/凉菜...
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  products    Product[]
+
+  @@unique([storeId, categoryId, name])
+  @@index([categoryId])
+}
+
+/// 菜品（物品）— 支持口味、出品部门、图片
+model Product {
+  id            String   @id @default(cuid())
+  storeId       Int      @default(1001)
+  name          String
+  categoryId    String
+  category      ProductCategory @relation(fields: [categoryId], references: [id])
+  subcategoryId String?
+  subcategory   ProductSubcategory? @relation(fields: [subcategoryId], references: [id])
+  price         Float
+  cost          Float    @default(0)
+  stock         Int      @default(0)
+  barcode       String?
+  imageUrl      String?
+  /// 出品部门：bar(吧台) / kitchen(厨房) / fruit(水果房) / outside(外卖)
+  outputDept    String   @default("bar")
+  /// 是否套餐
+  isPackage     Boolean  @default(false)
+  /// 套餐子项（JSON: [{productId, qty}]）
+  packageItems  String?
+  /// 是否计入最低消费（不勾选的物品点了也不算低消）
+  countToMinSpend Boolean @default(true)
+  /// 套餐价格（isPackage=true 时用，子商品单价隐藏）
+  packagePrice  Float    @default(0)
+  status        Int      @default(1) // 1:在售 0:停售 2:估清
+  /// 助记码/拼音
+  pinyin        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /// 绑定的口味（多对多）
+  flavors       ProductFlavor[]
+  /// 赠送规则
+  giftRules     GiftRule[]
+  /// 订单明细（反向关系）
+  orderItems    KtvOrderItem[]
+
+  @@index([storeId, categoryId])
+  @@index([storeId, outputDept])
+  @@index([storeId, status])
+}
+
+/// 口味分类（动态，管理员自定义大类，如"酒水温度""辣度"）
+model FlavorCategory {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  name        String   // 如"酒水温度"、"辣度"
+  required    Boolean  @default(false) // 是否必选
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  flavors     ProductFlavor[]
+
+  @@unique([storeId, name])
+}
+
+/// 口味选项（属于某个口味分类，如"常温""冰""微辣"）
+model ProductFlavor {
+  id            String   @id @default(cuid())
+  flavorCategoryId String
+  flavorCategory FlavorCategory @relation(fields: [flavorCategoryId], references: [id], onDelete: Cascade)
+  name          String   // 常温/冰/微辣/中辣
+  priceDelta    Float    @default(0) // 加价
+  sortOrder     Int      @default(0)
+
+  /// 哪些菜品用这个口味（多对多）
+  products      Product[]
+
+  @@unique([flavorCategoryId, name])
+}
+
+/// 自动赠送规则（买N送M + 配送）
+model GiftRule {
+  id            String   @id @default(cuid())
+  storeId       Int      @default(1001)
+  name          String   // 规则名：买2送1
+  /// 消费条件
+  condProductId String?
+  condProduct   Product? @relation(fields: [condProductId], references: [id])
+  condProductName String // 冗余
+  condQty       Int      @default(2) // 消费数量
+  cumulative    Boolean  @default(false) // 可累计
+  /// 赠送
+  giftProductName String // 赠送物品名
+  giftQty       Int      @default(1)
+  /// 配送项目（JSON: [{name, qty}]）
+  deliveries    String?
+  /// 限制
+  timeLimit     Boolean  @default(false)
+  startTime     String?  // "20:00"
+  endTime       String?  // "23:00"
+  roomLimit     Boolean  @default(false)
+  roomTypes     String?  // JSON: ["VIP","大包"]
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@index([storeId, enabled])
+}
+
+/// 订房经理（营销人员，用于提成）
+model BookingManager {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  name        String
+  phone       String?
+  /// 提成比例（百分比，如 10 表示 10%）
+  commissionRate Float  @default(0)
+  status      Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@index([storeId])
+}
+
+/// KTV 包厢
+model KtvRoom {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  roomNo      String
+  roomName    String
+  roomType    String
+  area        String?  // 区域：A区/B区
+  capacity    Int      @default(6)
+  hourlyRate  Float    @default(38)
+  minSpend    Float    @default(0)
+  /// 计费模式：hourly(计时) / minspend(低消) / package(开房套餐) / free(免费)
+  billingMode String   @default("hourly")
+  /// 开房套餐ID（billingMode=package 时用）
+  packageId   String?
+  /// 包厢IP（对接点歌机）
+  roomIp      String?
+  status      String   @default("idle") // idle/reserved/seated/in_use/cleaning/maintenance
+  openedAt    DateTime?
+  currentOrderId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders       KtvOrder[]
+  reservations KtvReservation[]
+
+  @@unique([storeId, roomNo])
+  @@index([storeId, status])
+}
+
+/// 出品点设置（吧台/厨房/水果房，含IP和打印方式）
+model OutputPoint {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  /// 出品部门标识：bar/kitchen/fruit/outside
+  deptCode    String
+  name        String   // 显示名：吧台/厨房/水果房
+  /// 内网IP
+  ip          String?
+  /// 打印方式：client(客户端) / network(网络打印机)
+  printMode   String   @default("client")
+  /// 中转服务器地址（网络打印机模式用）
+  relayServer String?
+  /// 是否启用
+  enabled     Boolean  @default(true)
+  /// 计算机名绑定（如 JS/CF/SGF）
+  computerName String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storeId, deptCode])
+}
+
+/// 员工（人事管理）
+model Employee {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  name        String
+  phone       String?
+  /// 岗位：manager(经理)/cashier(收银)/waiter(服务员)/bartender(吧台)/chef(厨房)/marketing(营销)
+  position    String
+  department  String?  // 部门
+  /// 权限角色：admin/manager/cashier/production
+  role        String   @default("cashier")
+  /// 折扣率（0-1，如 0.8 = 8折）
+  discount    Float    @default(1)
+  /// 每月赠送额度（每月1号重置）
+  monthlyGiftLimit Float @default(0)
+  /// 本月已用赠送额度
+  usedGiftAmount   Float @default(0)
+  /// 重置月份（用于判断是否该重置）
+  resetMonth  Int      @default(0)
+  status      Int      @default(1) // 1:在职 0:离职 2:待审核
+  entryDate   DateTime @default(now())
+  /// 登录账号（审核通过后生成）
+  username    String?  @unique
+  password    String?  // 简单密码，实际应hash
+  /// 是否门店管理员
+  isStoreAdmin Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store?   @relation(fields: [storeId], references: [storeId])
+
+  @@index([storeId, position])
+  @@index([storeId, role])
+  @@index([username])
+}
+
+/// KTV 包厢订单（一次开台一个订单）
+model KtvOrder {
+  id           String   @id @default(cuid())
+  storeId      Int      @default(1001)
+  orderNo      String   // 订单号
+  roomId       String
+  room         KtvRoom  @relation(fields: [roomId], references: [id])
+  roomNo       String   // 冗余便于查询
+  roomType     String
+  hourlyRate   Float
+  customerName String?
+  customerCount Int     @default(1)
+  phone        String?
+  /// 订房经理（营销人员，用于提成）
+  bookingManagerId String?
+  bookingManagerName String?
+  openedAt     DateTime @default(now())
+  closedAt     DateTime?
+  durationMinutes Int   @default(0) // 结算时长
+  roomFee      Float    @default(0) // 包厢费
+  productFee   Float    @default(0) // 商品消费
+  discount     Float    @default(0) // 折扣金额
+  totalAmount  Float    @default(0) // 实付
+  payMethod    String?
+  status       String   @default("open") // open:进行中 paid:已结账 cancelled:已取消
+  memberId     String?
+  member       Member?  @relation(fields: [memberId], references: [id])
+  createdAt    DateTime @default(now())
+
+  items        KtvOrderItem[]
+
+  @@index([storeId, status])
+  @@index([roomId])
+  @@index([openedAt])
+}
+
+/// KTV 订单商品明细
+model KtvOrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        KtvOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product? @relation(fields: [productId], references: [id])
+  productName  String
+  price        Float
+  qty          Int
+  /// 口味（JSON: [{category:"酒水温度", flavor:"冰"}]）
+  flavors      String?
+  /// 出品部门：bar/kitchen/fruit/outside（冗余自商品，便于分流）
+  outputDept   String   @default("bar")
+  /// 出品状态：pending(待出品) / printed(已打单) / delivered(已送达) / cancelled(已退)
+  status       String   @default("pending")
+  /// 是否赠送（自动赠送或经理赠送）
+  isGift       Boolean  @default(false)
+  giftRemark   String?
+  /// 出品时间戳
+  printedAt    DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([outputDept, status])
+}
+
+/// KTV 预订
+model KtvReservation {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  roomId      String?
+  room        KtvRoom? @relation(fields: [roomId], references: [id])
+  roomNo      String?  // 预留包厢号（可空表示不指定）
+  customerName String
+  phone       String
+  partySize   Int      @default(4)
+  startAt     DateTime
+  endAt       DateTime
+  status      String   @default("pending") // pending:待确认 confirmed:已确认 arrived:已到店 cancelled:已取消 noshow:未到
+  remark      String?
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, startAt])
+  @@index([status])
+}
+
+/// 会员（KTV + 超市通用）
+model Member {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  cardNo      String   @unique // 会员卡号
+  name        String
+  phone       String   @unique
+  level       String   @default("普通会员") // 普通会员/银卡/金卡/钻石
+  balance     Float    @default(0) // 储值余额
+  points      Int      @default(0) // 积分
+  totalSpent  Float    @default(0) // 累计消费
+  discount    Float    @default(1) // 折扣率 1=不打折 0.9=9折
+  status      Int      @default(1) // 1:正常 0:冻结
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions MemberTransaction[]
+  ktvOrders    KtvOrder[]
+
+  @@index([storeId])
+  @@index([phone])
+}
+
+/// 会员交易记录（充值/消费）
+model MemberTransaction {
+  id          String   @id @default(cuid())
+  memberId    String
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type        String   // recharge:充值 consume:消费 refund:退款
+  amount      Float    // 金额（充值正/消费负）
+  pointsDelta Int      @default(0) // 积分变动
+  balanceAfter Float
+  payMethod   String?  // 充值方式
+  remark      String?
+  relatedOrderNo String? // 关联订单号
+  createdAt   DateTime @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+/// 主题/模板（云端可下载，含房态配色、商品套餐、账单模板等）
+model ThemeTemplate {
+  id          String   @id @default(cuid())
+  /// 模板类型：room_theme(房态主题) / product_pack(商品套餐包) / bill_template(账单模板) / print_template(出品单模板) / member_activity(会员活动)
+  type        String
+  name        String
+  description String?
+  /// 缩略图
+  thumbnail   String?
+  /// 模板内容（JSON，结构随 type 不同）
+  content     String
+  /// 是否官方（官方模板不可删，只能下载应用）
+  isOfficial  Boolean  @default(true)
+  /// 下载/应用次数
+  useCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+}
+
+/// 房态显示字段配置（收银台勾选显示/隐藏）
+/// 存于 SysConfig: key="room_display_fields", value=JSON
+/// 例: {"roomNo":true,"bookingManager":true,"customerCount":true,"roomType":true,"consume":true,"openedAt":true}
+
+/// 打印模板（出品单/账单/预订单，可自定义设计）
+model PrintTemplate {
+  id          String   @id @default(cuid())
+  /// 模板类型：production(出品单) / bill(账单) / reservation(预订单) / gift(赠送单)
+  type        String
+  name        String
+  /// 纸张宽度 mm（58/80）
+  width       Int      @default(58)
+  /// 模板配置 JSON：{header, footer, showLogo, showQrCode, showRoomNo, showFlavor, showTime, fontSize, fields:[...]}
+  config      String
+  /// 是否启用
+  enabled     Boolean  @default(true)
+  /// 是否当前使用（同类型只能一个 active）
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type, isActive])
+}
+
+/// 门店申请（微信扫码填写，云端审批）
+model StoreApplication {
+  id          String   @id @default(cuid())
+  /// 门店名称
+  storeName   String
+  /// 申请人（门店管理员）姓名
+  contactName String
+  phone       String
+  region      String?
+  address     String?
+  /// 营业执照号
+  licenseNo   String?
+  /// 业态：ktv/supermarket
+  businessType String  @default("ktv")
+  /// 申请理由
+  remark      String?
+  /// 状态：pending(待审核) / approved(通过) / rejected(驳回)
+  status      String   @default("pending")
+  /// 审核意见
+  auditRemark String?
+  /// 审核通过后生成的门店ID
+  createdStoreId Int?
+  /// 审核人
+  auditedBy   String?
+  auditedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+  @@index([phone])
+}
+
+/// 员工入职申请（扫码填写，门店管理员审核）
+model JoinApplication {
+  id          String   @id @default(cuid())
+  storeId     Int
+  /// 姓名
+  name        String
+  phone       String
+  /// 应聘岗位
+  position    String   @default("waiter")
+  /// 期望权限角色
+  role        String   @default("cashier")
+  /// 身份证号
+  idCard      String?
+  /// 紧急联系人
+  emergencyContact String?
+  emergencyPhone   String?
+  /// 入职码（用于关联扫码）
+  joinCode    String
+  /// 状态：pending(待审核) / approved(通过) / rejected(驳回)
+  status      String   @default("pending")
+  /// 审核通过后生成的员工ID
+  createdEmployeeId String?
+  auditRemark String?
+  auditedBy   String?
+  auditedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([storeId, status])
+  @@index([joinCode])
+}
+

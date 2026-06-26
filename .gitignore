@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+build
+dist
+.env
+.env.local
+*.log
+db/*.db
+db/*.db-journal
+.DS_Store
+.vscode
+.idea
+upload
+download
+skills
+mini-services

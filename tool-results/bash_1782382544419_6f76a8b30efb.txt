@@ -1,0 +1,1137 @@
+     1→// KTV 收银系统 — 房态图 + 开台 + 点单 + 买单
+     2→"use client";
+     3→
+     4→import { useCallback, useEffect, useMemo, useState } from "react";
+     5→import {
+     6→  RefreshCw,
+     7→  Users,
+     8→  Clock,
+     9→  Sparkles,
+    10→  X,
+    11→  Search,
+    12→  Phone,
+    13→  User,
+    14→  CreditCard,
+    15→  Wallet,
+    16→  Plus,
+    17→  Minus,
+    18→  ShoppingBag,
+    19→  Receipt,
+    20→  ChefHat,
+    21→  Banknote,
+    22→  QrCode,
+    23→  Smartphone,
+    24→  Gift,
+    25→} from "lucide-react";
+    26→import { Button } from "@/components/ui/button";
+    27→import { Input } from "@/components/ui/input";
+    28→import { Label } from "@/components/ui/label";
+    29→import { Badge } from "@/components/ui/badge";
+    30→import {
+    31→  Dialog,
+    32→  DialogContent,
+    33→  DialogDescription,
+    34→  DialogFooter,
+    35→  DialogHeader,
+    36→  DialogTitle,
+    37→} from "@/components/ui/dialog";
+    38→import {
+    39→  Select,
+    40→  SelectContent,
+    41→  SelectItem,
+    42→  SelectTrigger,
+    43→  SelectValue,
+    44→} from "@/components/ui/select";
+    45→import {
+    46→  Tabs,
+    47→  TabsContent,
+    48→  TabsList,
+    49→  TabsTrigger,
+    50→} from "@/components/ui/tabs";
+    51→import { ScrollArea } from "@/components/ui/scroll-area";
+    52→import { Skeleton } from "@/components/ui/skeleton";
+    53→import { api } from "@/lib/api";
+    54→import type {
+    55→  KtvRoomInfoV2,
+    56→  KtvOrderInfoV2,
+    57→  KtvOrderItemInfoV2,
+    58→  KtvDashboardSummary,
+    59→  ProductInfo,
+    60→  BookingManagerInfo,
+    61→  MemberInfo,
+    62→  SysConfigInfo,
+    63→  RoomStatusColors,
+    64→  RoomDisplayFields,
+    65→} from "@/lib/types";
+    66→import { useToast } from "@/hooks/use-toast";
+    67→import { yuan, relTime, fullTime } from "@/components/common/format";
+    68→
+    69→// 默认房态颜色（与 seed 中 room_status_colors 一致）
+    70→const DEFAULT_STATUS_COLORS: RoomStatusColors = {
+    71→  idle: "#10b981",
+    72→  reserved: "#3b82f6",
+    73→  seated: "#f59e0b",
+    74→  in_use: "#ef4444",
+    75→  cleaning: "#a855f7",
+    76→  maintenance: "#6b7280",
+    77→};
+    78→
+    79→const DEFAULT_DISPLAY_FIELDS: RoomDisplayFields = {
+    80→  roomNo: true,
+    81→  roomName: true,
+    82→  roomType: true,
+    83→  area: false,
+    84→  bookingManager: true,
+    85→  customerName: true,
+    86→  customerCount: true,
+    87→  consume: true,
+    88→  openedAt: true,
+    89→  duration: true,
+    90→};
+    91→
+    92→const STATUS_LABEL: Record<keyof RoomStatusColors, string> = {
+    93→  idle: "空闲",
+    94→  reserved: "预订",
+    95→  seated: "带位",
+    96→  in_use: "使用中",
+    97→  cleaning: "清扫",
+    98→  maintenance: "维修",
+    99→};
+   100→
+   101→// 调暗颜色（用于 hover/边框）
+   102→function shade(hex: string, percent: number): string {
+   103→  const m = hex.replace("#", "");
+   104→  if (m.length !== 6) return hex;
+   105→  const r = parseInt(m.slice(0, 2), 16);
+   106→  const g = parseInt(m.slice(2, 4), 16);
+   107→  const b = parseInt(m.slice(4, 6), 16);
+   108→  const f = (c: number) =>
+   109→    Math.max(0, Math.min(255, Math.round(c + (percent / 100) * 255)));
+   110→  const toHex = (c: number) => f(c).toString(16).padStart(2, "0");
+   111→  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+   112→}
+   113→
+   114→// 解析口味 JSON
+   115→function parseFlavors(flavors: string | null): Array<{ category: string; flavor: string }> {
+   116→  if (!flavors) return [];
+   117→  try {
+   118→    const parsed = JSON.parse(flavors);
+   119→    return Array.isArray(parsed) ? parsed : [];
+   120→  } catch {
+   121→    return [];
+   122→  }
+   123→}
+   124→
+   125→function flavorText(flavors: string | null): string {
+   126→  const list = parseFlavors(flavors);
+   127→  if (list.length === 0) return "";
+   128→  return list.map((f) => f.flavor).join("/");
+   129→}
+   130→
+   131→// ============ 主组件 ============
+   132→export function CashierModule() {
+   133→  const [rooms, setRooms] = useState<KtvRoomInfoV2[]>([]);
+   134→  const [summary, setSummary] = useState<KtvDashboardSummary | null>(null);
+   135→  const [orders, setOrders] = useState<KtvOrderInfoV2[]>([]);
+   136→  const [colors, setColors] = useState<RoomStatusColors>(DEFAULT_STATUS_COLORS);
+   137→  const [fields, setFields] = useState<RoomDisplayFields>(DEFAULT_DISPLAY_FIELDS);
+   138→  const [loading, setLoading] = useState(true);
+   139→  const [openRoom, setOpenRoom] = useState<KtvRoomInfoV2 | null>(null);
+   140→  const [orderRoom, setOrderRoom] = useState<KtvRoomInfoV2 | null>(null);
+   141→  const { toast } = useToast();
+   142→
+   143→  const load = useCallback(async () => {
+   144→    try {
+   145→      const [r, s, o, cfgs] = await Promise.all([
+   146→        api.getKtvRooms(),
+   147→        api.getKtvDashboard(),
+   148→        api.getKtvOrders("open"),
+   149→        api.getSysConfigs(),
+   150→      ]);
+   151→      setRooms(r);
+   152→      setSummary(s);
+   153→      setOrders(o);
+   154→      const colorCfg = cfgs.find((c) => c.configKey === "room_status_colors");
+   155→      if (colorCfg) {
+   156→        try {
+   157→          setColors({ ...DEFAULT_STATUS_COLORS, ...JSON.parse(colorCfg.configValue) });
+   158→        } catch { /* ignore */ }
+   159→      }
+   160→      const fieldCfg = cfgs.find((c) => c.configKey === "room_display_fields");
+   161→      if (fieldCfg) {
+   162→        try {
+   163→          setFields({ ...DEFAULT_DISPLAY_FIELDS, ...JSON.parse(fieldCfg.configValue) });
+   164→        } catch { /* ignore */ }
+   165→      }
+   166→    } catch (e) {
+   167→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+   168→    } finally {
+   169→      setLoading(false);
+   170→    }
+   171→  }, [toast]);
+   172→
+   173→  useEffect(() => {
+   174→    load();
+   175→    const t = setInterval(load, 20000);
+   176→    return () => clearInterval(t);
+   177→  }, [load]);
+   178→
+   179→  // 按区域分组
+   180→  const groupedByArea = useMemo(() => {
+   181→    const g: Record<string, KtvRoomInfoV2[]> = {};
+   182→    for (const r of rooms) {
+   183→      const key = r.area || "未分区";
+   184→      (g[key] ??= []).push(r);
+   185→    }
+   186→    return g;
+   187→  }, [rooms]);
+   188→
+   189→  // 状态统计
+   190→  const statusCounts = useMemo(() => {
+   191→    const c: Record<string, number> = {
+   192→      idle: 0, reserved: 0, seated: 0, in_use: 0, cleaning: 0, maintenance: 0,
+   193→    };
+   194→    for (const r of rooms) c[r.status] = (c[r.status] ?? 0) + 1;
+   195→    return c;
+   196→  }, [rooms]);
+   197→
+   198→  const handleRoomClick = (room: KtvRoomInfoV2) => {
+   199→    if (room.status === "idle" || room.status === "reserved") {
+   200→      setOpenRoom(room);
+   201→    } else if (room.status === "in_use") {
+   202→      setOrderRoom(room);
+   203→    } else if (room.status === "cleaning") {
+   204→      // 一键恢复空闲
+   205→      api.cleanRoom(room.id).then(() => {
+   206→        toast({ title: `${room.roomNo} 已恢复空闲` });
+   207→        load();
+   208→      }).catch((e) => toast({ title: "操作失败", description: String(e), variant: "destructive" }));
+   209→    } else {
+   210→      toast({ title: `${room.roomNo} 当前状态：${STATUS_LABEL[room.status]}`, description: "该状态不可操作" });
+   211→    }
+   212→  };
+   213→
+   214→  return (
+   215→    <div className="min-h-screen bg-slate-900 text-slate-100 -m-4 sm:-m-6 p-4 sm:p-6">
+   216→      {/* 顶部 KPI */}
+   217→      <div className="grid gap-3 grid-cols-2 md:grid-cols-5 mb-5">
+   218→        <KpiCard title="总包厢" value={summary?.totalRooms ?? 0} loading={loading} />
+   219→        <KpiCard title="使用中" value={summary?.inUseRooms ?? 0} loading={loading} color={colors.in_use} />
+   220→        <KpiCard title="空闲" value={summary?.idleRooms ?? 0} loading={loading} color={colors.idle} />
+   221→        <KpiCard title="今日营收" value={summary ? yuan(summary.todayRevenue) : "—"} loading={loading} color="#10b981" isText />
+   222→        <KpiCard title="今日开台" value={summary?.todayOrders ?? 0} loading={loading} />
+   223→      </div>
+   224→
+   225→      {/* 图例栏 */}
+   226→      <div className="bg-slate-800 rounded-xl p-3 mb-5 flex flex-wrap items-center gap-3">
+   227→        <span className="text-xs text-slate-400 mr-1">房态图例：</span>
+   228→        {(Object.keys(STATUS_LABEL) as Array<keyof RoomStatusColors>).map((k) => (
+   229→          <button
+   230→            key={k}
+   231→            onClick={() => toast({ title: STATUS_LABEL[k], description: `${statusCounts[k] ?? 0} 间` })}
+   232→            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors"
+   233→          >
+   234→            <span
+   235→              className="w-3 h-3 rounded-sm"
+   236→              style={{ backgroundColor: colors[k] }}
+   237→            />
+   238→            <span className="text-xs text-slate-200">{STATUS_LABEL[k]}</span>
+   239→            <span className="text-xs font-bold text-white tabular-nums">{statusCounts[k] ?? 0}</span>
+   240→          </button>
+   241→        ))}
+   242→        <div className="ml-auto flex items-center gap-2">
+   243→          <span className="text-xs text-slate-400">每 20s 自动刷新</span>
+   244→          <Button size="sm" variant="outline" onClick={load} className="gap-1 bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">
+   245→            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> 刷新
+   246→          </Button>
+   247→        </div>
+   248→      </div>
+   249→
+   250→      {/* 房态网格（按区域分组） */}
+   251→      {loading ? (
+   252→        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+   253→          {Array.from({ length: 12 }).map((_, i) => (
+   254→            <Skeleton key={i} className="h-32 rounded-xl bg-slate-800" />
+   255→          ))}
+   256→        </div>
+   257→      ) : (
+   258→        <div className="space-y-6">
+   259→          {Object.entries(groupedByArea).map(([area, list]) => (
+   260→            <div key={area}>
+   261→              <div className="flex items-center gap-2 mb-3">
+   262→                <div className="w-1 h-5 rounded bg-emerald-500" />
+   263→                <h3 className="font-semibold text-slate-100">{area}</h3>
+   264→                <Badge variant="outline" className="border-slate-600 text-slate-300">
+   265→                  {list.length} 间
+   266→                </Badge>
+   267→                <Badge variant="outline" className="border-rose-700/50 text-rose-300 bg-rose-950/30">
+   268→                  使用中 {list.filter((r) => r.status === "in_use").length}
+   269→                </Badge>
+   270→              </div>
+   271→              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+   272→                {list.map((room) => (
+   273→                  <RoomBlock
+   274→                    key={room.id}
+   275→                    room={room}
+   276→                    colors={colors}
+   277→                    fields={fields}
+   278→                    onClick={() => handleRoomClick(room)}
+   279→                  />
+   280→                ))}
+   281→              </div>
+   282→            </div>
+   283→          ))}
+   284→        </div>
+   285→      )}
+   286→
+   287→      {/* 开台弹窗 */}
+   288→      <OpenRoomDialog
+   289→        room={openRoom}
+   290→        onClose={() => setOpenRoom(null)}
+   291→        onSuccess={() => {
+   292→          setOpenRoom(null);
+   293→          load();
+   294→        }}
+   295→      />
+   296→
+   297→      {/* 点单+买单弹窗 */}
+   298→      <OrderDialog
+   299→        room={orderRoom}
+   300→        orders={orders}
+   301→        colors={colors}
+   302→        onClose={() => setOrderRoom(null)}
+   303→        onChanged={load}
+   304→      />
+   305→    </div>
+   306→  );
+   307→}
+   308→
+   309→// ============ KPI 卡 ============
+   310→function KpiCard({
+   311→  title, value, loading, color, isText,
+   312→}: {
+   313→  title: string;
+   314→  value: number | string;
+   315→  loading?: boolean;
+   316→  color?: string;
+   317→  isText?: boolean;
+   318→}) {
+   319→  return (
+   320→    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50">
+   321→      <div className="text-xs text-slate-400">{title}</div>
+   322→      {loading ? (
+   323→        <Skeleton className="h-7 w-20 mt-1.5 bg-slate-700" />
+   324→      ) : (
+   325→        <div
+   326→          className={`${isText ? "text-xl" : "text-3xl"} font-bold mt-1 tabular-nums`}
+   327→          style={color ? { color } : undefined}
+   328→        >
+   329→          {value}
+   330→        </div>
+   331→      )}
+   332→    </div>
+   333→  );
+   334→}
+   335→
+   336→// ============ 房态色块 ============
+   337→function RoomBlock({
+   338→  room, colors, fields, onClick,
+   339→}: {
+   340→  room: KtvRoomInfoV2;
+   341→  colors: RoomStatusColors;
+   342→  fields: RoomDisplayFields;
+   343→  onClick: () => void;
+   344→}) {
+   345→  const color = colors[room.status] ?? "#6b7280";
+   346→  const elapsed = room.openedAt
+   347→    ? Math.floor((Date.now() - new Date(room.openedAt).getTime()) / 60000)
+   348→    : 0;
+   349→  const order = room.currentOrder;
+   350→
+   351→  return (
+   352→    <button
+   353→      onClick={onClick}
+   354→      className="group relative text-left rounded-xl p-3 min-h-[150px] h-full flex flex-col transition-all hover:scale-[1.03] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/40"
+   355→      style={{
+   356→        backgroundColor: color,
+   357→        boxShadow: `0 4px 14px ${color}40`,
+   358→      }}
+   359→    >
+   360→      {/* 顶部房号 */}
+   361→      <div className="flex items-start justify-between mb-1">
+   362→        <div className="text-white">
+   363→          {fields.roomNo && (
+   364→            <div className="text-2xl font-extrabold leading-none drop-shadow">{room.roomNo}</div>
+   365→          )}
+   366→          {fields.roomName && (
+   367→            <div className="text-[11px] opacity-90 mt-0.5 truncate">{room.roomName}</div>
+   368→          )}
+   369→        </div>
+   370→        <div className="text-[10px] font-medium text-white/90 bg-black/25 rounded px-1.5 py-0.5 backdrop-blur">
+   371→          {STATUS_LABEL[room.status]}
+   372→        </div>
+   373→      </div>
+   374→
+   375→      {/* 中间信息 */}
+   376→      <div className="space-y-0.5 text-[11px] text-white/95 mt-1.5">
+   377→        {fields.roomType && (
+   378→          <div className="opacity-90">{room.roomType} · 容{room.capacity}人</div>
+   379→        )}
+   380→        {fields.area && room.area && (
+   381→          <div className="opacity-80">{room.area}</div>
+   382→        )}
+   383→        {fields.bookingManager && room.bookingManagerName && (
+   384→          <div className="opacity-90 truncate">经理: {room.bookingManagerName}</div>
+   385→        )}
+   386→        {fields.customerName && order?.customerName && (
+   387→          <div className="opacity-90 truncate">客: {order.customerName}</div>
+   388→        )}
+   389→        {fields.customerCount && order && (
+   390→          <div className="opacity-80">{order.customerCount} 人</div>
+   391→        )}
+   392→        {fields.openedAt && room.openedAt && (
+   393→          <div className="opacity-80">{new Date(room.openedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} 开台</div>
+   394→        )}
+   395→        {fields.duration && room.openedAt && (
+   396→          <div className="opacity-90 font-semibold">已 {elapsed} 分钟</div>
+   397→        )}
+   398→      </div>
+   399→
+   400→      {/* 底部消费 */}
+   401→      {fields.consume && order && order.productFee > 0 && (
+   402→        <div className="mt-2 pt-2 border-t border-white/20">
+   403→          <div className="text-[10px] opacity-80">消费</div>
+   404→          <div className="text-white font-bold text-lg leading-none drop-shadow">
+   405→            {yuan(order.productFee)}
+   406→          </div>
+   407→        </div>
+   408→      )}
+   409→
+   410→      {/* 使用中标识闪烁点 */}
+   411→      {room.status === "in_use" && (
+   412→        <span className="absolute top-2 right-2 flex h-2 w-2">
+   413→          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+   414→          <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+   415→        </span>
+   416→      )}
+   417→    </button>
+   418→  );
+   419→}
+   420→
+   421→// ============ 开台弹窗 ============
+   422→function OpenRoomDialog({
+   423→  room, onClose, onSuccess,
+   424→}: {
+   425→  room: KtvRoomInfoV2 | null;
+   426→  onClose: () => void;
+   427→  onSuccess: () => void;
+   428→}) {
+   429→  const [customerName, setCustomerName] = useState("");
+   430→  const [customerCount, setCustomerCount] = useState("4");
+   431→  const [phone, setPhone] = useState("");
+   432→  const anagerId, setManagerId] = useState<string>("none");
+   433→  const anagers, setManagers] = useState<BookingManagerInfo[]>([]);
+   434→  const [submitting, setSubmitting] = useState(false);
+   435→  const { toast } = useToast();
+   436→
+   437→  useEffect(() => {
+   438→    if (room) {
+   439→      // eslint-disable-next-line react-hooks/set-state-in-effect
+   440→      setCustomerName("");
+   441→      setCustomerCount("4");
+   442→      setPhone("");
+   443→      setManagerId("none");
+   444→      setSubmitting(false);
+   445→    }
+   446→  }, [room]);
+   447→
+   448→  useEffect(() => {
+   449→    api.getBookingManagers().then(setManagers).catch(() => {});
+   450→  }, []);
+   451→
+   452→  const handleConfirm = async () => {
+   453→    if (!room) return;
+   454→    setSubmitting(true);
+   455→    try {
+   456→      const mgr = managers.find((m) => m.id === managerId);
+   457→      await api.openRoom(room.id, {
+   458→        customerName: customerName || undefined,
+   459→        customerCount: Number(customerCount) || 1,
+   460→        phone: phone || undefined,
+   461→        bookingManagerId: mgr?.id ?? null,
+   462→        bookingManagerName: mgr?.name ?? null,
+   463→      });
+   464→      toast({
+   465→        title: `${room.roomNo} 已开台`,
+   466→        description: `${customerName || "散客"} · ${customerCount} 人${mgr ? ` · 经理: ${mgr.name}` : ""}`,
+   467→      });
+   468→      onSuccess();
+   469→    } catch (e) {
+   470→      toast({ title: "开台失败", description: String(e), variant: "destructive" });
+   471→      setSubmitting(false);
+   472→    }
+   473→  };
+   474→
+   475→  return (
+   476→    <Dialog open={!!room} onOpenChange={(v) => !v && onClose()}>
+   477→      <DialogContent className="max-w-md bg-slate-800 border-slate-700 text-slate-100">
+   478→        <DialogHeader>
+   479→          <DialogTitle className="flex items-center gap-2">
+   480→            <Sparkles className="h-4 w-4 text-emerald-400" />
+   481→            开台 · {room?.roomNo} {room?.roomName}
+   482→          </DialogTitle>
+   483→          <DialogDescription className="text-slate-400">
+   484→            {room?.roomType} · {room?.capacity} 人 · {room ? yuan(room.hourlyRate) : ""}/小时
+   485→            {room && room.minSpend > 0 ? ` · 最低 ${yuan(room.minSpend)}` : ""}
+   486→          </DialogDescription>
+   487→        </DialogHeader>
+   488→        <div className="space-y-3 py-2">
+   489→          <div>
+   490→            <Label htmlFor="cust-name" className="text-slate-300">客户姓名</Label>
+   491→            <Input
+   492→              id="cust-name"
+   493→              placeholder="留空为散客"
+   494→              value={customerName}
+   495→              onChange={(e) => setCustomerName(e.target.value)}
+   496→              className="bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500"
+   497→            />
+   498→          </div>
+   499→          <div className="grid grid-cols-2 gap-3">
+   500→            <div>
+   501→              <Label htmlFor="cust-count" className="text-slate-300">人数</Label>
+   502→              <Input
+   503→                id="cust-count"
+   504→                type="number"
+   505→                min={1}
+   506→                value={customerCount}
+   507→                onChange={(e) => setCustomerCount(e.target.value)}
+   508→                className="bg-slate-900 border-slate-700 text-slate-100"
+   509→              />
+   510→            </div>
+   511→            <div>
+   512→              <Label htmlFor="cust-phone" className="text-slate-300">电话</Label>
+   513→              <Input
+   514→                id="cust-phone"
+   515→                placeholder="可选"
+   516→                value={phone}
+   517→                onChange={(e) => setPhone(e.target.value)}
+   518→                className="bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500"
+   519→              />
+   520→            </div>
+   521→          </div>
+   522→          <div>
+   523→            <Label className="text-slate-300">订房经理</Label>
+   524→            <Select value={managerId} onValueChange={setManagerId}>
+   525→              <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+   526→                <SelectValue placeholder="选择经理（可选）" />
+   527→              </SelectTrigger>
+   528→              <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+   529→                <SelectItem value="none">无</SelectItem>
+   530→                {managers.map((m) => (
+   531→                  <SelectItem key={m.id} value={m.id}>
+   532→                    {m.name}（提成 {m.commissionRate}%）
+   533→                  </SelectItem>
+   534→                ))}
+   535→              </SelectContent>
+   536→            </Select>
+   537→          </div>
+   538→        </div>
+   539→        <DialogFooter>
+   540→          <Button variant="outline" onClick={onClose} className="bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">
+   541→            取消
+   542→          </Button>
+   543→          <Button
+   544→            onClick={handleConfirm}
+   545→            disabled={submitting}
+   546→            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   547→          >
+   548→            {submitting ? "开台中..." : "确认开台"}
+   549→          </Button>
+   550→        </DialogFooter>
+   551→      </DialogContent>
+   552→    </Dialog>
+   553→  );
+   554→}
+   555→
+   556→// ============ 点单+买单弹窗 ============
+   557→function OrderDialog({
+   558→  room, orders, colors, onClose, onChanged,
+   559→}: {
+   560→  room: KtvRoomInfoV2 | null;
+   561→  orders: KtvOrderInfoV2[];
+   562→  colors: RoomStatusColors;
+   563→  onClose: () => void;
+   564→  onChanged: () => void;
+   565→}) {
+   566→  // 找到该房间的进行中订单
+   567→  const order = useMemo(() => {
+   568→    if (!room) return null;
+   569→    return orders.find((o) => o.id === room.currentOrderId) ?? null;
+   570→  }, [room, orders]);
+   571→
+   572→  const [products, setProducts] = useState<ProductInfo[]>([]);
+   573→  const [tab, setTab] = useState<"order" | "checkout">("order");
+   574→  const [category, setCategory] = useState<string>("all");
+   575→  const [keyword, setKeyword] = useState("");
+   576→  const [cart, setCart] = useState<Array<{ product: ProductInfo; qty: number; flavors: string | null }>>([]);
+   577→  const [flavorPickerFor, setFlavorPickerFor] = useState<ProductInfo | null>(null);
+   578→  const [pendingFlavorQty, setPendingFlavorQty] = useState(1);
+   579→  const [selectedFlavors, setSelectedFlavors] = useState<Record<string, string>>({});
+   580→  const [submitting, setSubmitting] = useState(false);
+   581→  const { toast } = useToast();
+   582→
+   583→  // 买单相关
+   584→  const [phoneSearch, setPhoneSearch] = useState("");
+   585→  const ember, setMember] = useState<MemberInfo | null>(null);
+   586→  const [payMethod, setPayMethod] = useState("cash");
+   587→  const [searching, setSearching] = useState(false);
+   588→
+   589→  useEffect(() => {
+   590→    api.getProducts().then(setProducts).catch(() => {});
+   591→  }, []);
+   592→
+   593→  useEffect(() => {
+   594→    if (room) {
+   595→      setTab("order");
+   596→      setCart([]);
+   597→      setCategory("all");
+   598→      setKeyword("");
+   599→      setPhoneSearch("");
+   600→      setMember(null);
+   601→      setPayMethod("cash");
+   602→    }
+   603→  }, [room]);
+   604→
+   605→  const categories = useMemo(() => {
+   606→    const s = new Map<string, string>();
+   607→    for (const p of products) s.set(p.categoryId, p.categoryName);
+   608→    return Array.from(s.entries()).map(([id, name]) => ({ id, name }));
+   609→  }, [products]);
+   610→
+   611→  const filteredProducts = useMemo(() => {
+   612→    return products.filter((p) => {
+   613→      if (p.status !== 1) return false;
+   614→      if (category !== "all" && p.categoryId !== category) return false;
+   615→      if (keyword && !p.name.includes(keyword) && !(p.pinyin ?? "").toLowerCase().includes(keyword.toLowerCase())) return false;
+   616→      return true;
+   617→    });
+   618→  }, [products, category, keyword]);
+   619→
+   620→  const handleProductClick = (p: ProductInfo) => {
+   621→    if (p.stock <= 0) {
+   622→      toast({ title: `${p.name} 已售罄`, variant: "destructive" });
+   623→      return;
+   624→    }
+   625→    if (p.flavors && p.flavors.length > 0) {
+   626→      setSelectedFlavors({});
+   627→      setPendingFlavorQty(1);
+   628→      setFlavorPickerFor(p);
+   629→    } else {
+   630→      addToCart(p, 1, null);
+   631→    }
+   632→  };
+   633→
+   634→  const addToCart = (p: ProductInfo, qty: number, flavors: string | null) => {
+   635→    setCart((prev) => {
+   636→      const idx = prev.findIndex((c) => c.product.id === p.id && c.flavors === flavors);
+   637→      if (idx >= 0) {
+   638→        const next = [...prev];
+   639→        next[idx] = { ...next[idx], qty: next[idx].qty + qty };
+   640→        return next;
+   641→      }
+   642→      return [...prev, { product: p, qty, flavors }];
+   643→    });
+   644→  };
+   645→
+   646→  const updateCartQty = (idx: number, delta: number) => {
+   647→    setCart((prev) => {
+   648→      const next = [...prev];
+   649→      const newQty = next[idx].qty + delta;
+   650→      if (newQty <= 0) return next.filter((_, i) => i !== idx);
+   651→      next[idx] = { ...next[idx], qty: newQty };
+   652→      return next;
+   653→    });
+   654→  };
+   655→
+   656→  const cartTotal = cart.reduce((s, c) => s + c.product.price * c.qty, 0);
+   657→
+   658→  const handleSubmitItems = async () => {
+   659→    if (!order || cart.length === 0) return;
+   660→    setSubmitting(true);
+   661→    try {
+   662→      await api.addOrderItems(order.id, cart.map((c) => ({
+   663→        productId: c.product.id,
+   664→        qty: c.qty,
+   665→        flavors: c.flavors,
+   666→      })));
+   667→      toast({
+   668→        title: "点单成功",
+   669→        description: `${cart.length} 种商品已加单 · ${yuan(cartTotal)}`,
+   670→      });
+   671→      setCart([]);
+   672→      onChanged();
+   673→    } catch (e) {
+   674→      toast({ title: "点单失败", description: String(e), variant: "destructive" });
+   675→    } finally {
+   676→      setSubmitting(false);
+   677→    }
+   678→  };
+   679→
+   680→  const handleCancelItem = async (item: KtvOrderItemInfoV2) => {
+   681→    if (!order) return;
+   682→    try {
+   683→      await api.cancelOrderItem(order.id, item.id);
+   684→      toast({ title: `已退：${item.productName} x${item.qty}` });
+   685→      onChanged();
+   686→    } catch (e) {
+   687→      toast({ title: "退单失败", description: String(e), variant: "destructive" });
+   688→    }
+   689→  };
+   690→
+   691→  const handleSearchMember = async () => {
+   692→    if (!phoneSearch) return;
+   693→    setSearching(true);
+   694→    try {
+   695→      const m = await api.getMemberByPhone(phoneSearch);
+   696→      if (m) {
+   697→        setMember(m);
+   698→        toast({ title: `会员：${m.name}`, description: `${m.level} · 折扣 ${Math.round(m.discount * 10)} 折 · 余额 ${yuan(m.balance)}` });
+   699→      } else {
+   700→        setMember(null);
+   701→        toast({ title: "未找到会员", description: `电话 ${phoneSearch} 无记录` });
+   702→      }
+   703→    } catch (e) {
+   704→      toast({ title: "查询失败", description: String(e), variant: "destructive" });
+   705→    } finally {
+   706→      setSearching(false);
+   707→    }
+   708→  };
+   709→
+   710→  const handleCheckout = async () => {
+   711→    if (!order) return;
+   712→    setSubmitting(true);
+   713→    try {
+   714→      const res = await api.checkoutOrder(order.id, {
+   715→        payMethod,
+   716→        memberId: member?.id,
+   717→      });
+   718→      toast({
+   719→        title: "买单成功",
+   720→        description: `${res.orderNo} · ${yuan(res.totalAmount)} · ${payMethod}`,
+   721→      });
+   722→      onChanged();
+   723→      onClose();
+   724→    } catch (e) {
+   725→      toast({ title: "买单失败", description: String(e), variant: "destructive" });
+   726→    } finally {
+   727→      setSubmitting(false);
+   728→    }
+   729→  };
+   730→
+   731→  // 实时计费
+   732→  const elapsed = order ? Math.max(1, Math.ceil((Date.now() - new Date(order.openedAt).getTime()) / 60000)) : 0;
+   733→  const roomFee = order ? Math.round(order.hourlyRate * (elapsed / 60) * 100) / 100 : 0;
+   734→  const productFee = order?.productFee ?? 0;
+   735→  const discount = member && productFee > 0 ? Math.round(productFee * (1 - member.discount) * 100) / 100 : 0;
+   736→  const total = Math.max(0, roomFee + productFee - discount);
+   737→
+   738→  if (!room) return null;
+   739→
+   740→  return (
+   741→    <Dialog open={!!room} onOpenChange={(v) => !v && onClose()}>
+   742→      <DialogContent className="max-w-5xl bg-slate-800 border-slate-700 text-slate-100 max-h-[92vh] overflow-hidden flex flex-col">
+   743→        <DialogHeader>
+   744→          <DialogTitle className="flex items-center gap-2">
+   745→            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors.in_use }} />
+   746→            {room.roomNo} {room.roomName}
+   747→            <Badge variant="outline" className="border-slate-600 text-slate-300 ml-2">
+   748→              {order?.orderNo ?? "—"}
+   749→            </Badge>
+   750→          </DialogTitle>
+   751→          <DialogDescription className="text-slate-400">
+   752→            {order?.customerName || "散客"} · {order?.customerCount} 人 · {order ? yuan(order.hourlyRate) : ""}/小时
+   753→            {order?.bookingManagerName ? ` · 经理 ${order.bookingManagerName}` : ""}
+   754→          </DialogDescription>
+   755→        </DialogHeader>
+   756→
+   757→        <Tabs value={tab} onValueChange={(v) => setTab(v as "order" | "checkout")} className="flex-1 overflow-hidden flex flex-col">
+   758→          <TabsList className="bg-slate-900 border border-slate-700">
+   759→            <TabsTrigger value="order" className="data-[state=active]:bg-slate-700">
+   760→              <ShoppingBag className="h-4 w-4 mr-1" /> 点单
+   761→            </TabsTrigger>
+   762→            <TabsTrigger value="checkout" className="data-[state=active]:bg-slate-700">
+   763→              <Receipt className="h-4 w-4 mr-1" /> 买单
+   764→            </TabsTrigger>
+   765→          </TabsList>
+   766→
+   767→          {/* 点单 Tab */}
+   768→          <TabsContent value="order" className="flex-1 overflow-hidden mt-2">
+   769→            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 h-full">
+   770→              {/* 商品列表 */}
+   771→              <div className="md:col-span-3 flex flex-col">
+   772→                <div className="flex gap-2 mb-2">
+   773→                  <div className="relative flex-1">
+   774→                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+   775→                    <Input
+   776→                      placeholder="搜索商品名/拼音"
+   777→                      value={keyword}
+   778→                      onChange={(e) => setKeyword(e.target.value)}
+   779→                      className="pl-8 bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500"
+   780→                    />
+   781→                  </div>
+   782→                </div>
+   783→                <div className="flex flex-wrap gap-1.5 mb-2">
+   784→                  <CategoryChip active={category === "all"} onClick={() => setCategory("all")}>全部</CategoryChip>
+   785→                  {categories.map((c) => (
+   786→                    <CategoryChip key={c.id} active={category === c.id} onClick={() => setCategory(c.id)}>
+   787→                      {c.name}
+   788→                    </CategoryChip>
+   789→                  ))}
+   790→                </div>
+   791→                <ScrollArea className="flex-1 max-h-[50vh] pr-2">
+   792→                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+   793→                    {filteredProducts.map((p) => (
+   794→                      <button
+   795→                        key={p.id}
+   796→                        onClick={() => handleProductClick(p)}
+   797→                        disabled={p.stock <= 0}
+   798→                        className="text-left bg-slate-900 hover:bg-slate-700 border border-slate-700 rounded-lg p-2.5 transition-colors disabled:opacity-40"
+   799→                      >
+   800→                        <div className="font-medium text-sm text-slate-100 truncate">{p.name}</div>
+   801→                        <div className="flex items-center justify-between mt-1">
+   802→                          <span className="text-emerald-400 font-bold text-sm">{yuan(p.price)}</span>
+   803→                          {p.flavors.length > 0 && (
+   804→                            <Badge variant="outline" className="text-[10px] py-0 h-4 border-amber-500/50 text-amber-300">
+   805→                              {p.flavors.length}口味
+   806→                            </Badge>
+   807→                          )}
+   808→                        </div>
+   809→                        <div className="text-[10px] text-slate-500 mt-0.5">库存 {p.stock}</div>
+   810→                      </button>
+   811→                    ))}
+   812→                  </div>
+   813→                </ScrollArea>
+   814→              </div>
+   815→
+   816→              {/* 购物车 + 当前订单 */}
+   817→              <div className="md:col-span-2 flex flex-col bg-slate-900 rounded-lg p-3 border border-slate-700">
+   818→                <div className="text-sm font-semibold text-slate-200 mb-2 flex items-center gap-1">
+   819→                  <ShoppingBag className="h-4 w-4 text-emerald-400" /> 本次加单
+   820→                </div>
+   821→                <ScrollArea className="flex-1 max-h-32 mb-2">
+   822→                  {cart.length === 0 ? (
+   823→                    <div className="text-xs text-slate-500 text-center py-4">点击左侧商品加单</div>
+   824→                  ) : (
+   825→                    <div className="space-y-1.5">
+   826→                      {cart.map((c, i) => (
+   827→                        <div key={i} className="flex items-center gap-2 bg-slate-800 rounded p-1.5 text-xs">
+   828→                          <div className="flex-1 min-w-0">
+   829→                            <div className="font-medium text-slate-100 truncate">{c.product.name}</div>
+   830→                            {c.flavors && (
+   831→                              <div className="text-[10px] text-amber-300">{flavorText(c.flavors)}</div>
+   832→                            )}
+   833→                          </div>
+   834→                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-300 hover:bg-slate-700" onClick={() => updateCartQty(i, -1)}>
+   835→                            <Minus className="h-3 w-3" />
+   836→                          </Button>
+   837→                          <span className="text-slate-100 font-bold w-5 text-center">{c.qty}</span>
+   838→                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-300 hover:bg-slate-700" onClick={() => updateCartQty(i, 1)}>
+   839→                            <Plus className="h-3 w-3" />
+   840→                          </Button>
+   841→                          <span className="text-emerald-400 font-bold w-14 text-right">{yuan(c.product.price * c.qty)}</span>
+   842→                        </div>
+   843→                      ))}
+   844→                    </div>
+   845→                  )}
+   846→                </ScrollArea>
+   847→                <div className="flex items-center justify-between mb-2 text-sm">
+   848→                  <span className="text-slate-400">小计</span>
+   849→                  <span className="text-emerald-400 font-bold">{yuan(cartTotal)}</span>
+   850→                </div>
+   851→                <Button
+   852→                  onClick={handleSubmitItems}
+   853→                  disabled={cart.length === 0 || submitting}
+   854→                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   855→                >
+   856→                  {submitting ? "提交中..." : "提交加单"}
+   857→                </Button>
+   858→
+   859→                {/* 当前订单明细 */}
+   860→                <div className="mt-3 pt-3 border-t border-slate-700">
+   861→                  <div className="text-sm font-semibold text-slate-200 mb-2 flex items-center gap-1">
+   862→                    <Receipt className="h-4 w-4 text-rose-400" /> 已点明细
+   863→                  </div>
+   864→                  <ScrollArea className="max-h-40">
+   865→                    {order?.items && order.items.length > 0 ? (
+   866→                      <div className="space-y-1">
+   867→                        {order.items.map((it) => (
+   868→                          <div key={it.id} className="flex items-center gap-2 text-xs py-1 border-b border-slate-700/50">
+   869→                            <div className="flex-1 min-w-0">
+   870→                              <div className="text-slate-100 truncate">
+   871→                                {it.productName} x{it.qty}
+   872→                                {it.isGift && <Gift className="inline h-3 w-3 ml-1 text-pink-400" />}
+   873→                              </div>
+   874→                              {it.flavors && (
+   875→                                <div className="text-[10px] text-amber-300">{flavorText(it.flavors)}</div>
+   876→                              )}
+   877→                              <div className="text-[10px] text-slate-500">
+   878→                                {relTime(it.createdAt)} · {deptLabel(it.outputDept)} · {it.status}
+   879→                              </div>
+   880→                            </div>
+   881→                            <span className="text-slate-300 w-14 text-right">{yuan(it.price * it.qty)}</span>
+   882→                            {it.status === "pending" && (
+   883→                              <Button
+   884→                                size="sm"
+   885→                                variant="ghost"
+   886→                                className="h-6 px-1.5 text-rose-400 hover:bg-rose-950/40"
+   887→                                onClick={() => handleCancelItem(it)}
+   888→                              >
+   889→                                <X className="h-3 w-3" />
+   890→                              </Button>
+   891→                            )}
+   892→                          </div>
+   893→                        ))}
+   894→                      </div>
+   895→                    ) : (
+   896→                      <div className="text-xs text-slate-500 text-center py-3">暂无明细</div>
+   897→                    )}
+   898→                  </ScrollArea>
+   899→                </div>
+   900→              </div>
+   901→            </div>
+   902→          </TabsContent>
+   903→
+   904→          {/* 买单 Tab */}
+   905→          <TabsContent value="checkout" className="flex-1 overflow-auto mt-2">
+   906→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   907→              {/* 账单详情 */}
+   908→              <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
+   909→                <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-1">
+   910→                  <Receipt className="h-4 w-4 text-rose-400" /> 账单详情
+   911→                </h3>
+   912→                <div className="space-y-2 text-sm">
+   913→                  <Row label="开台时间" value={fullTime(order?.openedAt ?? null)} />
+   914→                  <Row label="已用时" value={`${elapsed} 分钟`} />
+   915→                  <Row label="包厢费" value={yuan(roomFee)} sub={`${order ? yuan(order.hourlyRate) : ""}/小时`} />
+   916→                  <Row label="商品消费" value={yuan(productFee)} />
+   917→                  {discount > 0 && (
+   918→                    <Row label={`会员折扣 (${member?.name})`} value={`-${yuan(discount)}`} color="text-emerald-400" />
+   919→                  )}
+   920→                  <div className="border-t border-slate-700 my-2" />
+   921→                  <div className="flex items-center justify-between">
+   922→                    <span className="text-slate-300 font-medium">应付总额</span>
+   923→                    <span className="text-3xl font-extrabold text-rose-400">{yuan(total)}</span>
+   924→                  </div>
+   925→                </div>
+   926→              </div>
+   927→
+   928→              {/* 支付方式 */}
+   929→              <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
+   930→                <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-1">
+   931→                  <CreditCard className="h-4 w-4 text-emerald-400" /> 会员与支付
+   932→                </h3>
+   933→                <div className="space-y-3">
+   934→                  <div>
+   935→                    <Label className="text-slate-300 text-xs">会员查找（可选，享折扣）</Label>
+   936→                    <div className="flex gap-2 mt-1">
+   937→                      <div className="relative flex-1">
+   938→                        <Phone className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+   939→                        <Input
+   940→                          placeholder="输入手机号"
+   941→                          value={phoneSearch}
+   942→                          onChange={(e) => setPhoneSearch(e.target.value)}
+   943→                          className="pl-8 bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500"
+   944→                        />
+   945→                      </div>
+   946→                      <Button onClick={handleSearchMember} disabled={searching} variant="outline" className="bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">
+   947→                        {searching ? "..." : "查找"}
+   948→                      </Button>
+   949→                    </div>
+   950→                    {member && (
+   951→                      <div className="mt-2 bg-emerald-950/30 border border-emerald-700/40 rounded p-2 text-xs">
+   952→                        <div className="flex items-center gap-1 text-emerald-300 font-medium">
+   953→                          <User className="h-3 w-3" /> {member.name} · {member.level}
+   954→                        </div>
+   955→                        <div className="text-slate-400 mt-0.5">
+   956→                          卡号 {member.cardNo} · 余额 {yuan(member.balance)} · 折扣 {Math.round(member.discount * 10)} 折
+   957→                        </div>
+   958→                      </div>
+   959→                    )}
+   960→                  </div>
+   961→
+   962→                  <div>
+   963→                    <Label className="text-slate-300 text-xs">支付方式</Label>
+   964→                    <div className="grid grid-cols-5 gap-1.5 mt-1">
+   965→                      <PayBtn active={payMethod === "cash"} onClick={() => setPayMethod("cash")} icon={<Banknote className="h-4 w-4" />} label="现金" />
+   966→                      <PayBtn active={payMethod === "wechat"} onClick={() => setPayMethod("wechat")} icon={<QrCode className="h-4 w-4" />} label="微信" />
+   967→                      <PayBtn active={payMethod === "alipay"} onClick={() => setPayMethod("alipay")} icon={<Smartphone className="h-4 w-4" />} label="支付宝" />
+   968→                      <PayBtn active={payMethod === "member"} onClick={() => setPayMethod("member")} icon={<Wallet className="h-4 w-4" />} label="会员卡" disabled={!member} />
+   969→                      <PayBtn active={payMethod === "card"} onClick={() => setPayMethod("card")} icon={<CreditCard className="h-4 w-4" />} label="银行卡" />
+   970→                    </div>
+   971→                  </div>
+   972→
+   973→                  <Button
+   974→                    onClick={handleCheckout}
+   975→                    disabled={submitting}
+   976→                    className="w-full h-12 text-base bg-rose-600 hover:bg-rose-700 text-white"
+   977→                  >
+   978→                    {submitting ? "结账中..." : `确认买单 ${yuan(total)}`}
+   979→                  </Button>
+   980→                </div>
+   981→              </div>
+   982→            </div>
+   983→          </TabsContent>
+   984→        </Tabs>
+   985→      </DialogContent>
+   986→
+   987→      {/* 口味选择弹窗 */}
+   988→      <FlavorPickerDialog
+   989→        product={flavorPickerFor}
+   990→        onClose={() => setFlavorPickerFor(null)}
+   991→        onConfirm={(flavors) => {
+   992→          if (flavorPickerFor) addToCart(flavorPickerFor, pendingFlavorQty, flavors);
+   993→          setFlavorPickerFor(null);
+   994→        }}
+   995→        selectedFlavors={selectedFlavors}
+   996→        setSelectedFlavors={setSelectedFlavors}
+   997→        qty={pendingFlavorQty}
+   998→        setQty={setPendingFlavorQty}
+   999→      />
+  1000→    </Dialog>
+  1001→  );
+  1002→}
+  1003→
+  1004→// ============ 口味选择弹窗 ============
+  1005→function FlavorPickerDialog({
+  1006→  product, onClose, onConfirm, selectedFlavors, setSelectedFlavors, qty, setQty,
+  1007→}: {
+  1008→  product: ProductInfo | null;
+  1009→  onClose: () => void;
+  1010→  onConfirm: (flavors: string | null) => void;
+  1011→  selectedFlavors: Record<string, string>;
+  1012→  setSelectedFlavors: (v: Record<string, string>) => void;
+  1013→  qty: number;
+  1014→  setQty: (n: number) => void;
+  1015→}) {
+  1016→  if (!product) return null;
+  1017→  // 按口味分类分组
+  1018→  const grouped: Record<string, typeof product.flavors> = {};
+  1019→  for (const f of product.flavors) {
+  1020→    (grouped[f.categoryName] ??= []).push(f);
+  1021→  }
+  1022→
+  1023→  const handleConfirm = () => {
+  1024→    const list = Object.entries(selectedFlavors).map(([category, flavor]) => ({ category, flavor }));
+  1025→    onConfirm(list.length > 0 ? JSON.stringify(list) : null);
+  1026→  };
+  1027→
+  1028→  return (
+  1029→    <Dialog open={!!product} onOpenChange={(v) => !v && onClose()}>
+  1030→      <DialogContent className="max-w-md bg-slate-800 border-slate-700 text-slate-100">
+  1031→        <DialogHeader>
+  1032→          <DialogTitle className="flex items-center gap-2">
+  1033→            <ChefHat className="h-4 w-4 text-amber-400" />
+  1034→            {product.name} · 选口味
+  1035→          </DialogTitle>
+  1036→          <DialogDescription className="text-slate-400">
+  1037→            {yuan(product.price)} · 仅显示该商品绑定的口味
+  1038→          </DialogDescription>
+  1039→        </DialogHeader>
+  1040→        <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+  1041→          {Object.entries(grouped).map(([catName, opts]) => (
+  1042→            <div key={catName}>
+  1043→              <Label className="text-slate-300 text-xs mb-1.5 block">{catName}</Label>
+  1044→              <div className="flex flex-wrap gap-1.5">
+  1045→                {opts.map((f) => {
+  1046→                  const selected = selectedFlavors[catName] === f.name;
+  1047→                  return (
+  1048→                    <button
+  1049→                      key={f.id}
+  1050→                      onClick={() => {
+  1051→                        setSelectedFlavors({
+  1052→                          ...selectedFlavors,
+  1053→                          [catName]: selected ? "" : f.name,
+  1054→                        });
+  1055→                      }}
+  1056→                      className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+  1057→                        selected
+  1058→                          ? "bg-amber-500 border-amber-400 text-slate-900 font-semibold"
+  1059→                          : "bg-slate-900 border-slate-700 text-slate-200 hover:border-amber-500/50"
+  1060→                      }`}
+  1061→                    >
+  1062→                      {f.name}
+  1063→                    </button>
+  1064→                  );
+  1065→                })}
+  1066→              </div>
+  1067→            </div>
+  1068→          ))}
+  1069→          <div>
+  1070→            <Label className="text-slate-300 text-xs mb-1.5 block">数量</Label>
+  1071→            <div className="flex items-center gap-2">
+  1072→              <Button size="sm" variant="outline" onClick={() => setQty(Math.max(1, qty - 1))} className="bg-slate-900 border-slate-700 text-slate-100">-</Button>
+  1073→              <span className="text-lg font-bold w-8 text-center">{qty}</span>
+  1074→              <Button size="sm" variant="outline" onClick={() => setQty(qty + 1)} className="bg-slate-900 border-slate-700 text-slate-100">+</Button>
+  1075→            </div>
+  1076→          </div>
+  1077→        </div>
+  1078→        <DialogFooter>
+  1079→          <Button variant="outline" onClick={onClose} className="bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">取消</Button>
+  1080→          <Button onClick={handleConfirm} className="bg-amber-500 hover:bg-amber-600 text-slate-900">
+  1081→            加入订单 · {yuan(product.price * qty)}
+  1082→          </Button>
+  1083→        </DialogFooter>
+  1084→      </DialogContent>
+  1085→    </Dialog>
+  1086→  );
+  1087→}
+  1088→
+  1089→// ============ 子组件 ============
+  1090→function CategoryChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  1091→  return (
+  1092→    <button
+  1093→      onClick={onClick}
+  1094→      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+  1095→        active
+  1096→          ? "bg-emerald-500 text-white font-medium"
+  1097→          : "bg-slate-900 border border-slate-700 text-slate-300 hover:border-emerald-500/50"
+  1098→      }`}
+  1099→    >
+  1100→      {children}
+  1101→    </button>
+  1102→  );
+  1103→}
+  1104→
+  1105→function PayBtn({ active, onClick, icon, label, disabled }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; disabled?: boolean }) {
+  1106→  return (
+  1107→    <button
+  1108→      onClick={onClick}
+  1109→      disabled={disabled}
+  1110→      className={`flex flex-col items-center gap-1 py-2 rounded-lg border transition-colors disabled:opacity-40 ${
+  1111→        active
+  1112→          ? "bg-emerald-600 border-emerald-500 text-white"
+  1113→          : "bg-slate-800 border-slate-700 text-slate-300 hover:border-emerald-500/50"
+  1114→      }`}
+  1115→    >
+  1116→      {icon}
+  1117→      <span className="text-[10px]">{label}</span>
+  1118→    </button>
+  1119→  );
+  1120→}
+  1121→
+  1122→function Row({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  1123→  return (
+  1124→    <div className="flex items-center justify-between">
+  1125→      <span className="text-slate-400 text-xs">{label}{sub && <span className="text-slate-600 ml-1">({sub})</span>}</span>
+  1126→      <span className={`font-medium ${color ?? "text-slate-100"}`}>{value}</span>
+  1127→    </div>
+  1128→  );
+  1129→}
+  1130→
+  1131→function deptLabel(dept: string): string {
+  1132→  const m: Record<string, string> = { bar: "吧台", kitchen: "厨房", fruit: "水果房", outside: "外卖" };
+  1133→  return m[dept] ?? dept;
+  1134→}
+  1135→
+  1136→// 重新导出图标避免未使用警告
+  1137→

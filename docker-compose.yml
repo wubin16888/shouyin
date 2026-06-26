@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  ktv-system:
+    build: .
+    container_name: ktv-system
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      # 持久化数据库（重要！否则重启数据丢失）
+      - ./data/db:/app/db
+      # 持久化上传的图片
+      - ./data/public/dishes:/app/public/dishes
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/db/custom.db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
