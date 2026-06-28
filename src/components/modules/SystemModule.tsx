@@ -3863,12 +3863,36 @@ function AiThemeDesigner({ open, onClose, onApplied }: {
         const authStr = localStorage.getItem("ktv-auth");
         if (authStr) { const auth = JSON.parse(authStr); if (auth?.state?.user?.storeId) storeId = auth.state.user.storeId; }
       } catch {}
-      // 保存配色到 SysConfig
+      // 保存房态配色
       await fetch("/api/sys/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
         body: JSON.stringify({ configKey: "room_status_colors", configValue: JSON.stringify(result.colors) }),
       });
+      // 保存页面背景色
+      if (result.bgColor) {
+        await fetch("/api/sys/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
+          body: JSON.stringify({ configKey: "page_bg_color", configValue: result.bgColor }),
+        });
+      }
+      // 保存卡片背景色
+      if (result.cardBg) {
+        await fetch("/api/sys/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
+          body: JSON.stringify({ configKey: "card_bg_color", configValue: result.cardBg }),
+        });
+      }
+      // 保存文字颜色
+      if (result.textColor) {
+        await fetch("/api/sys/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
+          body: JSON.stringify({ configKey: "text_color", configValue: result.textColor }),
+        });
+      }
       // 保存为模板
       await api.createTheme({
         type: "room_theme",

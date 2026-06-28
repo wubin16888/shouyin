@@ -126,6 +126,28 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  // 读取 AI 主题配色（页面背景/卡片背景/文字色）
+  const [themeColors, setThemeColors] = useState<{ bg?: string; card?: string; text?: string }>({});
+  useEffect(() => {
+    let cancelled = false;
+    const loadTheme = async () => {
+      try {
+        const res = await fetch("/api/sys/config?category=system");
+        const body = await res.json();
+        if (!cancelled && body.data) {
+          const cfgs = body.data;
+          const bg = cfgs.find((c: any) => c.configKey === "page_bg_color")?.configValue;
+          const card = cfgs.find((c: any) => c.configKey === "card_bg_color")?.configValue;
+          const text = cfgs.find((c: any) => c.configKey === "text_color")?.configValue;
+           
+          setThemeColors({ bg, card, text });
+        }
+      } catch { /* ignore */ }
+    };
+    loadTheme();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -148,7 +170,13 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
   const activeItem = ALL_ITEMS.find((n) => n.key === active);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+    <div
+      className="min-h-screen flex flex-col"
+      style={{
+        backgroundColor: themeColors.bg || undefined,
+        color: themeColors.text || undefined,
+      }}
+    >
       {/* 顶栏 — 渐变 + 玻璃质感 */}
       <header className="sticky top-0 z-40 border-b border-slate-700/50 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-900/70">
         {/* 顶部高光线 */}
