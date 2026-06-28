@@ -11,9 +11,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/store/auth-store";
 
-export function LoginPage({ onClose, onLogined }: {
-  onClose: () => void;
+export function LoginPage({ onLogined, onApply }: {
   onLogined: (defaultModule: string) => void;
+  onApply?: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -85,7 +85,11 @@ export function LoginPage({ onClose, onLogined }: {
               <p>• 收银员(cashier)：收银系统</p>
               <p>• 吧台/厨房(production)：出品系统</p>
             </div>
-            <Button variant="ghost" onClick={onClose} className="w-full text-slate-400 text-xs">返回首页</Button>
+            {onApply && (
+              <Button variant="ghost" onClick={onApply} className="w-full text-slate-400 text-xs gap-1">
+                <Store className="h-3.5 w-3.5" /> 新门店入驻申请
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
