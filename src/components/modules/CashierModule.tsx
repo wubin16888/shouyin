@@ -344,6 +344,11 @@ export function CashierModule() {
     return g;
   }, [rooms]);
 
+  // 区域筛选
+  const [areaFilter, setAreaFilter] = useState<string>("all");
+  const areas = Object.keys(groupedByArea);
+  const filteredRooms = areaFilter === "all" ? rooms : (groupedByArea[areaFilter] ?? []);
+
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = {
       idle: 0, reserved: 0, seated: 0, in_use: 0, cleaning: 0, maintenance: 0,
@@ -427,34 +432,66 @@ export function CashierModule() {
           ))}
         </div>
       ) : (
-        <div className="space-y-8">
-          {Object.entries(groupedByArea).map(([area, list]) => (
-            <div key={area}>
-              {/* 区域分组标题：左侧色条装饰 + 字号区分 */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-1 h-7 rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
-                <h3 className="text-lg font-bold text-slate-100 tracking-tight">{area}</h3>
-                <Badge variant="outline" className="border-slate-700 text-slate-300 bg-slate-800/60 font-medium">
-                  {list.length} 间
-                </Badge>
-                <Badge variant="outline" className="border-rose-800/50 text-rose-300 bg-rose-950/40 font-medium">
-                  使用中 {list.filter((r) => r.status === "in_use").length}
-                </Badge>
-                <div className="flex-1 h-px bg-gradient-to-r from-slate-700/60 to-transparent ml-2" />
-              </div>
-              <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                {list.map((room) => (
-                  <RoomBlock
-                    key={room.id}
-                    room={room}
-                    colors={colors}
-                    fields={fields}
-                    onClick={() => handleRoomClick(room)}
-                  />
-                ))}
-              </div>
+        <div className="space-y-4">
+          {/* 区域筛选条 — 横排，全部在最前 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setAreaFilter("all")}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                areaFilter === "all"
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30"
+                  : "bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:bg-slate-700/70",
+              )}
+            >
+              全部 <span className="ml-1 text-xs opacity-70">{rooms.length}</span>
+            </button>
+            {areas.map((area) => {
+              const list = groupedByArea[area];
+              const inUse = list.filter((r) => r.status === "in_use").length;
+              return (
+                <button
+                  key={area}
+                  onClick={() => setAreaFilter(area)}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
+                    areaFilter === area
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30"
+                      : "bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:bg-slate-700/70",
+                  )}
+                >
+                  {area}
+                  <span className="text-xs opacity-70">{list.length}</span>
+                  {inUse > 0 && (
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                      areaFilter === area ? "bg-white/20 text-white" : "bg-rose-950/60 text-rose-300",
+                    )}>
+                      {inUse}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 房台网格 — 紧凑排列 */}
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
+            {filteredRooms.map((room) => (
+              <RoomBlock
+                key={room.id}
+                room={room}
+                colors={colors}
+                fields={fields}
+                onClick={() => handleRoomClick(room)}
+              />
+            ))}
+          </div>
+          {filteredRooms.length === 0 && (
+            <div className="text-center py-12 text-slate-500 text-sm">
+              该区域暂无房台
             </div>
-          ))}
+          )}
         </div>
       )}
 
