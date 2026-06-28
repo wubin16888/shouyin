@@ -3518,6 +3518,7 @@ function ThemesTab() {
   const [displayFields, setDisplayFields] = useState<Record<string, boolean>>({});
   const [savingFields, setSavingFields] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -3600,6 +3601,9 @@ function ThemesTab() {
             desc="一键应用房态主题、商品包、账单/出品单模板与会员活动。也可保存当前配置为模板"
           />
           <div className="flex gap-2">
+            <Button onClick={() => setAiOpen(true)} className="bg-violet-600 hover:bg-violet-500 gap-1">
+              <Sparkles className="h-4 w-4" /> AI 设计师
+            </Button>
             <Button onClick={() => setCreateOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
               <Plus className="h-4 w-4" /> 创建模板
             </Button>
@@ -3703,6 +3707,7 @@ function ThemesTab() {
       </div>
 
       <CreateThemeDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }} />
+      <AiThemeDesigner open={aiOpen} onClose={() => setAiOpen(false)} onApplied={() => { setAiOpen(false); load(); }} />
     </div>
   );
 }
@@ -3804,6 +3809,179 @@ function CreateThemeDialog({ open, onClose, onCreated }: {
             {saving ? "保存中..." : "保存到市场"}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============ AI 主题设计师 ============
+function AiThemeDesigner({ open, onClose, onApplied }: {
+  open: boolean; onClose: () => void; onApplied: () => void;
+}) {
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const presets = [
+    "高端商务风，深蓝色调，金色点缀",
+    "浪漫粉色系，适合情侣包厢",
+    "赛博朋克霓虹风，紫绿对比色",
+    "清新自然风，绿色系，放松舒适",
+    "中国红喜庆风，红金搭配",
+    "暗黑奢华风，黑金配色",
+  ];
+
+  const generate = async () => {
+    if (!prompt.trim()) { toast({ title: "请描述你想要的风格", variant: "destructive" }); return; }
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/ai/theme-design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const body = await res.json();
+      if (body.code === 200 && body.data) {
+        setResult(body.data);
+      } else {
+        toast({ title: "AI 设计失败", description: body.msg || "请重试", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "网络错误", description: String(e), variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  const apply = async () => {
+    if (!result) return;
+    setSaving(true);
+    try {
+      let storeId = 1001;
+      try {
+        const authStr = localStorage.getItem("ktv-auth");
+        if (authStr) { const auth = JSON.parse(authStr); if (auth?.state?.user?.storeId) storeId = auth.state.user.storeId; }
+      } catch {}
+      // 保存配色到 SysConfig
+      await fetch("/api/sys/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
+        body: JSON.stringify({ configKey: "room_status_colors", configValue: JSON.stringify(result.colors) }),
+      });
+      // 保存为模板
+      await api.createTheme({
+        type: "room_theme",
+        name: result.name || "AI设计主题",
+        description: `AI生成: ${prompt}`,
+        content: JSON.stringify({ bgColor: result.bgColor, cardBg: result.cardBg, colors: result.colors }),
+      });
+      toast({ title: "AI 主题已应用", description: "配色已下发，刷新页面查看效果" });
+      onApplied();
+    } catch (e) {
+      toast({ title: "应用失败", description: String(e), variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-400" /> AI 主题设计师
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">描述你想要的风格，AI 自动生成配色方案</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* 输入区 */}
+          <div>
+            <Label className="text-xs text-slate-400">描述你想要的风格</Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !loading && generate()}
+                placeholder="如：高端商务风，深蓝色调，金色点缀"
+                className="bg-slate-800/60 border-slate-700 text-slate-100 flex-1"
+              />
+              <Button onClick={generate} disabled={loading} className="bg-violet-600 hover:bg-violet-500 gap-1">
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {loading ? "生成中..." : "生成"}
+              </Button>
+            </div>
+            {/* 快捷预设 */}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {presets.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPrompt(p)}
+                  className="text-xs px-2.5 py-1 rounded-full border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-violet-300 hover:border-violet-700/50 transition-all"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 预览区 */}
+          {result && (
+            <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-100">{result.name}</div>
+                  {result.description && <div className="text-xs text-slate-500 mt-0.5">{result.description}</div>}
+                </div>
+                <Button onClick={apply} disabled={saving} size="sm" className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+                  {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  应用并保存
+                </Button>
+              </div>
+
+              {/* 背景预览 */}
+              <div
+                className="rounded-lg p-4 grid grid-cols-3 sm:grid-cols-5 gap-2"
+                style={{ backgroundColor: result.bgColor || "#0f172a" }}
+              >
+                {Object.entries(result.colors || {}).map(([status, color]) => (
+                  <div
+                    key={status}
+                    className="rounded-lg p-3 text-center"
+                    style={{ backgroundColor: color as string, boxShadow: `0 4px 14px ${color}40` }}
+                  >
+                    <div className="text-white text-xs font-bold">{status}</div>
+                    <div className="text-white/60 text-[10px] mt-0.5">{color as string}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 文字颜色预览 */}
+              {result.textColor && (
+                <div className="rounded-lg p-3" style={{ backgroundColor: result.bgColor || "#0f172a" }}>
+                  <div className="text-sm" style={{ color: result.textColor }}>
+                    {result.textColor === "#ffffff" ? "白色文字" : "深色文字"} · 营业中 ¥3,280.00
+                  </div>
+                </div>
+              )}
+
+              {/* AI 建议 */}
+              {result.tips && (
+                <div className="text-xs text-slate-400 bg-slate-900/60 rounded-lg p-3 border border-slate-700/40">
+                  💡 {result.tips}
+                </div>
+              )}
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex flex-col items-center py-8">
+              <Sparkles className="h-8 w-8 text-violet-400 animate-pulse mb-2" />
+              <div className="text-sm text-slate-400">AI 正在设计配色方案...</div>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
