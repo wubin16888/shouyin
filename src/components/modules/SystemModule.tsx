@@ -3517,6 +3517,7 @@ function ThemesTab() {
   const [applying, setApplying] = useState<string | null>(null);
   const [displayFields, setDisplayFields] = useState<Record<string, boolean>>({});
   const [savingFields, setSavingFields] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -3596,11 +3597,16 @@ function ThemesTab() {
           <SectionTitle
             icon={Palette}
             title="主题模板市场"
-            desc="一键应用房态主题、商品包、账单/出品单模板与会员活动"
+            desc="一键应用房态主题、商品包、账单/出品单模板与会员活动。也可保存当前配置为模板"
           />
-          <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
-            <RefreshCw className="h-3.5 w-3.5" /> 刷新
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setCreateOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+              <Plus className="h-4 w-4" /> 创建模板
+            </Button>
+            <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
+              <RefreshCw className="h-3.5 w-3.5" /> 刷新
+            </Button>
+          </div>
         </div>
 
         {loading ? (
@@ -3695,7 +3701,111 @@ function ThemesTab() {
           </CardContent>
         </DarkCard>
       </div>
+
+      <CreateThemeDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }} />
     </div>
+  );
+}
+
+function CreateThemeDialog({ open, onClose, onCreated }: {
+  open: boolean; onClose: () => void; onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState("room_theme");
+  const [desc, setDesc] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const save = async () => {
+    if (!name.trim()) { toast({ title: "请填写模板名称", variant: "destructive" }); return; }
+    setSaving(true);
+    try {
+      let content = "{}";
+      let storeId = 1001;
+      try {
+        const authStr = localStorage.getItem("ktv-auth");
+        if (authStr) { const auth = JSON.parse(authStr); if (auth?.state?.user?.storeId) storeId = auth.state.user.storeId; }
+      } catch {}
+
+      if (type === "room_theme") {
+        const res = await fetch(`/api/sys/config?category=room&storeId=${storeId}`);
+        const body = await res.json();
+        const colorsCfg = body.data?.find((c: any) => c.configKey === "room_status_colors");
+        const colors = colorsCfg ? JSON.parse(colorsCfg.configValue) : {
+          idle: "#059669", in_use: "#e11d48", checkout: "#eab308", cleaning: "#8b5cf6", maintenance: "#475569",
+        };
+        content = JSON.stringify({ bgColor: "#0f172a", cardBg: "#1e293b", colors });
+      } else if (type === "bill_template") {
+        content = JSON.stringify({ width: 58, fontSize: 12, showQrCode: true, showLogo: true, header: "欢迎光临", footer: "感谢惠顾" });
+      } else if (type === "print_template") {
+        content = JSON.stringify({ width: 58, showRoomNo: true, showFlavor: true, showTime: true, copies: 2 });
+      } else if (type === "member_activity") {
+        content = JSON.stringify([{ amount: 500, gift: 50 }, { amount: 1000, gift: 120 }]);
+      }
+
+      await api.createTheme({ type, name: name.trim(), description: desc.trim() || undefined, content });
+      toast({ title: "模板已保存到市场", description: `${name.trim()} · 其他门店可下载使用` });
+      onCreated();
+    } catch (e) {
+      toast({ title: "保存失败", description: String(e), variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const typeOptions = [
+    { v: "room_theme", l: "房态主题", d: "保存当前房态配色" },
+    { v: "bill_template", l: "账单模板", d: "保存账单格式" },
+    { v: "print_template", l: "出品单模板", d: "保存出品单格式" },
+    { v: "member_activity", l: "会员活动", d: "保存会员活动方案" },
+    { v: "product_pack", l: "商品套餐包", d: "保存当前商品配置" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5 text-emerald-400" /> 创建模板
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">将当前配置保存为模板，可分享给其他门店使用</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs text-slate-400">模板名称</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="如：我的专属配色"
+              className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs text-slate-400">模板类型</Label>
+            <div className="grid grid-cols-1 gap-2 mt-1">
+              {typeOptions.map((t) => (
+                <button key={t.v} onClick={() => setType(t.v)}
+                  className={cn("flex items-center gap-3 rounded-lg border-2 p-2.5 text-left transition-all",
+                    type === t.v ? "border-emerald-500 bg-emerald-500/15" : "border-slate-700 bg-slate-800/50 hover:border-slate-600")}>
+                  <div className="flex-1">
+                    <div className={cn("text-sm font-medium", type === t.v ? "text-emerald-300" : "text-slate-200")}>{t.l}</div>
+                    <div className="text-xs text-slate-500">{t.d}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs text-slate-400">描述（可选）</Label>
+            <Input value={desc} onChange={(e) => setDesc(e.target.value)}
+              placeholder="简短描述"
+              className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="bg-slate-800 border-slate-700 text-slate-300">取消</Button>
+          <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 gap-1">
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "保存中..." : "保存到市场"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

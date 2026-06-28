@@ -284,6 +284,8 @@ export const api = {
     }),
   getThemes: (type?: string) =>
     request<ThemeTemplateInfo[]>(`/api/sys/themes?${type ? `type=${type}` : ""}`),
+  createTheme: (data: { type: string; name: string; description?: string; content: string }) =>
+    request<any>("/api/sys/themes", { method: "POST", body: JSON.stringify(data) }),
   applyTheme: (themeId: string) =>
     request<{ applied: boolean; type: string }>("/api/sys/apply-theme", {
       method: "POST",
