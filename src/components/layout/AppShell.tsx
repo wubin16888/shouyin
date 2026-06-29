@@ -137,6 +137,11 @@ export function AppShell({ active, onNavigate, children, allowedModules, onLogou
 
   useEffect(() => { loadFromServer(); }, [loadFromServer]);
 
+  // 默认暗色主题：进入页面时直接挂上 .dark，避免亮屏闪烁
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);

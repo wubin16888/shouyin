@@ -34,6 +34,8 @@ import {
   TrendingUp,
   Wine,
   Cherry,
+  CalendarClock,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -146,6 +148,7 @@ const DEFAULT_STATUS_COLORS: RoomStatusColors = {
   in_use: "#e11d48",
   cleaning: "#8b5cf6",
   maintenance: "#475569",
+  checkout: "#eab308",
 };
 
 const DEFAULT_DISPLAY_FIELDS: RoomDisplayFields = {
@@ -168,6 +171,7 @@ const STATUS_LABEL: Record<keyof RoomStatusColors, string> = {
   in_use: "使用中",
   cleaning: "清扫",
   maintenance: "维修",
+  checkout: "打单中",
 };
 
 // ============ 辅助函数 ============
@@ -298,6 +302,8 @@ export function CashierModule() {
   const [openRoom, setOpenRoom] = useState<KtvRoomInfoV2 | null>(null);
   const [orderRoom, setOrderRoom] = useState<KtvRoomInfoV2 | null>(null);
   const [successBill, setSuccessBill] = useState<OrderBill | null>(null);
+  const [reserveOpen, setReserveOpen] = useState(false);
+  const [maintainOpen, setMaintainOpen] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -352,7 +358,7 @@ export function CashierModule() {
 
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = {
-      idle: 0, reserved: 0, seated: 0, in_use: 0, cleaning: 0, maintenance: 0,
+      idle: 0, reserved: 0, seated: 0, in_use: 0, cleaning: 0, maintenance: 0, checkout: 0,
     };
     for (const r of rooms) c[r.status] = (c[r.status] ?? 0) + 1;
     return c;
@@ -361,15 +367,18 @@ export function CashierModule() {
   const handleRoomClick = (room: KtvRoomInfoV2) => {
     if (room.status === "idle" || room.status === "reserved") {
       setOpenRoom(room);
-    } else if (room.status === "in_use") {
+    } else if (room.status === "in_use" || room.status === "checkout") {
+      // 使用中 / 打单中 → 打开点单+买单弹窗（checkout 已打单，待支付）
       setOrderRoom(room);
     } else if (room.status === "cleaning") {
       api.cleanRoom(room.id).then(() => {
         toast({ title: `${room.roomNo} 已恢复空闲` });
         load();
       }).catch((e) => toast({ title: "操作失败", description: String(e), variant: "destructive" }));
+    } else if (room.status === "maintenance") {
+      toast({ title: `${room.roomNo} 维修中`, description: "请在「维修」菜单解除维修后使用" });
     } else {
-      toast({ title: `${room.roomNo} 当前状态：${STATUS_LABEL[room.status]}`, description: "该状态不可操作" });
+      toast({ title: `${room.roomNo} 当前状态：${STATUS_LABEL[room.status as keyof RoomStatusColors] ?? room.status}`, description: "该状态不可操作" });
     }
   };
 
@@ -419,6 +428,22 @@ export function CashierModule() {
         ))}
         <div className="ml-auto flex items-center gap-2 pl-3 border-l border-slate-700/60">
           <span className="text-xs text-slate-500 hidden sm:inline">每 20s 自动刷新</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setReserveOpen(true)}
+            className="gap-1.5 bg-sky-950/40 border-sky-700/50 text-sky-300 hover:bg-sky-900/40 hover:border-sky-600 rounded-lg h-8"
+          >
+            <CalendarClock className="h-3.5 w-3.5" /> 订房
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setMaintainOpen(true)}
+            className="gap-1.5 bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-600 rounded-lg h-8"
+          >
+            <Wrench className="h-3.5 w-3.5" /> 维修
+          </Button>
           <Button size="sm" variant="outline" onClick={load} className="gap-1.5 bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700 hover:border-slate-600 rounded-lg h-8">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> 刷新
           </Button>
@@ -519,6 +544,26 @@ export function CashierModule() {
       <SuccessBillDialog
         bill={successBill}
         onClose={() => setSuccessBill(null)}
+      />
+
+      {/* 订房 / 维修 弹窗 — 顶部操作栏触发 */}
+      <ReserveRoomDialog
+        open={reserveOpen}
+        rooms={rooms}
+        onClose={() => setReserveOpen(false)}
+        onSuccess={() => {
+          setReserveOpen(false);
+          load();
+        }}
+      />
+      <MaintainRoomDialog
+        open={maintainOpen}
+        rooms={rooms}
+        onClose={() => setMaintainOpen(false)}
+        onSuccess={() => {
+          setMaintainOpen(false);
+          load();
+        }}
       />
 
       <AiChatWidget title="收银助手" buttonColor="bg-emerald-600 hover:bg-emerald-500" />
@@ -649,7 +694,7 @@ function RoomBlock({
         </div>
       )}
 
-      {room.status === "in_use" && (
+      {(room.status === "in_use" || room.status === "checkout") && (
         <span className="absolute top-2.5 right-2.5 flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
@@ -794,6 +839,295 @@ function OpenRoomDialog({
   );
 }
 
+// ============ 订房弹窗 — 顶部"订房"按钮触发 ============
+function ReserveRoomDialog({
+  open, rooms, onClose, onSuccess,
+}: {
+  open: boolean;
+  rooms: KtvRoomInfoV2[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const idleRooms = useMemo(() => rooms.filter((r) => r.status === "idle"), [rooms]);
+  const [roomId, setRoomId] = useState<string>("");
+  const [customerName, setCustomerName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [remark, setRemark] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRoomId(idleRooms[0]?.id ?? "");
+      setCustomerName("");
+      setPhone("");
+      setRemark("");
+      setSubmitting(false);
+    }
+  }, [open, idleRooms]);
+
+  const selected = idleRooms.find((r) => r.id === roomId);
+
+  const handleConfirm = async () => {
+    if (!roomId) {
+      toast({ title: "请选择空闲房台", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.reserveRoom(roomId, {
+        customerName: customerName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        remark: remark.trim() || undefined,
+      });
+      const r = rooms.find((x) => x.id === roomId);
+      toast({
+        title: `${r?.roomNo ?? ""} 已订房`,
+        description: customerName ? `客户：${customerName}` : "已标记为预订状态",
+      });
+      onSuccess();
+    } catch (e) {
+      toast({ title: "订房失败", description: String(e), variant: "destructive" });
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md bg-slate-800 border-slate-700 text-slate-100">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-sky-400" /> 订房
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            将空闲房台标记为「预订」状态，客人到店后点击该房台直接开台
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          {idleRooms.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-6 bg-slate-900/60 rounded-lg border border-slate-700/50">
+              当前无空闲房台可预订
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-slate-300">选择房台</Label>
+                <Select value={roomId} onValueChange={setRoomId}>
+                  <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100 mt-1">
+                    <SelectValue placeholder="选择空闲房台" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 max-h-72">
+                    {idleRooms.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.roomNo} · {r.roomName}（{r.roomType}）
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selected && (
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    容纳 {selected.capacity} 人 · {yuan(selected.hourlyRate)}/小时
+                    {selected.minSpend > 0 ? ` · 最低 ${yuan(selected.minSpend)}` : ""}
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label className="text-slate-300">客户姓名（可选）</Label>
+                <Input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="留空为预留"
+                  className="bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">联系电话（可选）</Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="可选"
+                  className="bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300">备注（可选）</Label>
+                <Textarea
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  rows={2}
+                  placeholder="如：8点到店、3男2女"
+                  className="bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500 mt-1"
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">
+            取消
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={submitting || idleRooms.length === 0}
+            className="bg-sky-600 hover:bg-sky-700 text-white"
+          >
+            {submitting ? "订房中..." : "确认订房"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============ 维修弹窗 — 顶部"维修"按钮触发 ============
+function MaintainRoomDialog({
+  open, rooms, onClose, onSuccess,
+}: {
+  open: boolean;
+  rooms: KtvRoomInfoV2[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  // 可置维修：空闲 / 预订 / 打单中 / 清扫；可解除维修：维修中
+  const targetRooms = useMemo(
+    () => rooms.filter((r) => r.status === "idle" || r.status === "reserved" || r.status === "checkout" || r.status === "cleaning"),
+    [rooms],
+  );
+  const maintenanceRooms = useMemo(() => rooms.filter((r) => r.status === "maintenance"), [rooms]);
+  const [mode, setMode] = useState<"set" | "unset">("set");
+  const [roomId, setRoomId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMode("set");
+      setRoomId(targetRooms[0]?.id ?? "");
+      setSubmitting(false);
+    }
+  }, [open, targetRooms]);
+
+  const list = mode === "set" ? targetRooms : maintenanceRooms;
+  const selected = list.find((r) => r.id === roomId);
+
+  const handleConfirm = async () => {
+    if (!roomId) {
+      toast({ title: mode === "set" ? "请选择要维修的房台" : "请选择要解除维修的房台", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.maintainRoom(roomId, mode);
+      const r = rooms.find((x) => x.id === roomId);
+      toast({
+        title: mode === "set" ? `${r?.roomNo ?? ""} 已置维修` : `${r?.roomNo ?? ""} 已恢复空闲`,
+        description: mode === "set" ? "该房台暂时无法使用，客人无法开台" : "可重新开台使用",
+      });
+      onSuccess();
+    } catch (e) {
+      toast({ title: "操作失败", description: String(e), variant: "destructive" });
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md bg-slate-800 border-slate-700 text-slate-100">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-slate-300" /> 维修房管理
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            将房台置为维修状态（设备故障/保洁维护），或解除维修恢复使用
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { setMode("set"); setRoomId(targetRooms[0]?.id ?? ""); }}
+              className={cn(
+                "rounded-lg border-2 p-2.5 text-center transition-all",
+                mode === "set"
+                  ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                  : "border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-600",
+              )}
+            >
+              <div className="text-sm font-semibold">置维修</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{targetRooms.length} 个可选</div>
+            </button>
+            <button
+              onClick={() => { setMode("unset"); setRoomId(maintenanceRooms[0]?.id ?? ""); }}
+              className={cn(
+                "rounded-lg border-2 p-2.5 text-center transition-all",
+                mode === "unset"
+                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
+                  : "border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-600",
+              )}
+            >
+              <div className="text-sm font-semibold">解除维修</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{maintenanceRooms.length} 个维修中</div>
+            </button>
+          </div>
+
+          {list.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-6 bg-slate-900/60 rounded-lg border border-slate-700/50">
+              {mode === "set" ? "无可置维修的房台" : "当前无维修中的房台"}
+            </div>
+          ) : (
+            <div>
+              <Label className="text-slate-300">
+                {mode === "set" ? "选择要置维修的房台" : "选择要解除维修的房台"}
+              </Label>
+              <Select value={roomId} onValueChange={setRoomId}>
+                <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100 mt-1">
+                  <SelectValue placeholder="选择房台" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 max-h-72">
+                  {list.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.roomNo} · {r.roomName}（{STATUS_LABEL[r.status as keyof RoomStatusColors] ?? r.status}）
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selected && (
+                <div className="text-[11px] text-slate-500 mt-1">
+                  类型：{selected.roomType} · 容纳 {selected.capacity} 人
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode === "set" && (
+            <div className="text-[11px] text-amber-300/80 leading-relaxed bg-amber-950/20 border border-amber-700/30 rounded p-2 flex items-start gap-1.5">
+              <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+              <span>置维修后该房台将无法开台/订房；如房台正在使用，请先结账。</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="bg-slate-700 border-slate-600 text-slate-100 hover:bg-slate-600">
+            取消
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={submitting || list.length === 0}
+            className={cn(
+              mode === "set"
+                ? "bg-amber-600 hover:bg-amber-500 text-white"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white",
+            )}
+          >
+            {submitting ? "处理中..." : mode === "set" ? "确认置维修" : "解除维修"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ============ 商品缩略图：有图显图，无图用部门图标占位 ============
 function DeptFallbackIcon({ dept, className }: { dept: string; className?: string }) {
   switch (dept) {
@@ -882,6 +1216,9 @@ function OrderDialog({
   const [bill, setBill] = useState<OrderBill | null>(null);
   const [billLoading, setBillLoading] = useState(false);
   const [billTick, setBillTick] = useState(0);
+  // 打单流程：打印账单后才显示"买单"按钮，且房台状态置为"打单中"(checkout)
+  const [billPrinted, setBillPrinted] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   // 弹窗
   const [giftOpen, setGiftOpen] = useState(false);
@@ -902,6 +1239,9 @@ function OrderDialog({
       setPayMethod("cash");
       setBill(null);
       setBillTick(0);
+      // 已是 checkout 状态视为已打单
+      setBillPrinted(room.status === "checkout");
+      setPrinting(false);
     }
   }, [room]);
 
@@ -1067,6 +1407,52 @@ function OrderDialog({
   const handleTransferSuccess = () => {
     onChanged();
     onClose();
+  };
+
+  // 打印账单 — 拉取账单 → 渲染 HTML → window.print
+  // 打印成功后：房台状态置为 "checkout"（打单中），并解锁"买单"按钮
+  const handlePrintBill = async () => {
+    if (!order || !room) return;
+    setPrinting(true);
+    try {
+      // 拉取最新账单
+      const b = (await api.getOrderBill(order.id)) as OrderBill;
+      setBill(b);
+      // 渲染并打印
+      const html = renderBillPrintHtml(b);
+      const w = window.open("", "_blank", "width=480,height=720");
+      if (!w) {
+        toast({ title: "打印失败", description: "浏览器拦截了弹窗，请允许", variant: "destructive" });
+        return;
+      }
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => {
+        try { w.print(); } catch { /* ignore */ }
+        try { w.close(); } catch { /* ignore */ }
+      }, 250);
+
+      // 标记已打单 + 切房台状态为 checkout
+      setBillPrinted(true);
+      if (room.status !== "checkout") {
+        try {
+          await api.setRoomStatus(room.id, "checkout");
+        } catch (e) {
+          // 状态更新失败不阻断流程，仅提示
+          toast({ title: "房台状态更新失败", description: String(e), variant: "destructive" });
+        }
+      }
+      toast({
+        title: "账单已打印",
+        description: `${b.orderNo} · 房台进入「打单中」状态，可点击下方买单按钮完成结算`,
+      });
+      onChanged();
+    } catch (e) {
+      toast({ title: "账单打印失败", description: String(e), variant: "destructive" });
+    } finally {
+      setPrinting(false);
+    }
   };
 
   if (!room) return null;
@@ -1319,9 +1705,28 @@ function OrderDialog({
                   <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1">
                     <Receipt className="h-4 w-4 text-rose-400" /> 完整账单
                   </h3>
-                  <Button size="sm" variant="ghost" onClick={refreshBill} className="h-7 text-slate-400 hover:text-slate-100">
-                    <RefreshCw className={`h-3.5 w-3.5 ${billLoading ? "animate-spin" : ""}`} />
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={refreshBill}
+                      className="h-7 text-slate-400 hover:text-slate-100"
+                      title="刷新账单"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${billLoading ? "animate-spin" : ""}`} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handlePrintBill}
+                      disabled={printing || !order || !bill}
+                      className="h-7 gap-1 text-amber-300 hover:text-amber-200 hover:bg-amber-950/40"
+                      title="打印账单（打印后房台进入打单中状态，并解锁买单按钮）"
+                    >
+                      {printing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                      <span className="text-xs">打印账单</span>
+                    </Button>
+                  </div>
                 </div>
                 {billLoading ? (
                   <div className="space-y-2">
@@ -1381,13 +1786,36 @@ function OrderDialog({
                     </div>
                   </div>
 
-                  <Button
-                    onClick={handleCheckout}
-                    disabled={submitting || !bill}
-                    className="w-full h-12 text-base bg-rose-600 hover:bg-rose-700 text-white"
-                  >
-                    {submitting ? "结账中..." : `确认买单 ${bill ? yuan(bill.totalAmount) : "—"}`}
-                  </Button>
+                  {billPrinted ? (
+                    <Button
+                      onClick={handleCheckout}
+                      disabled={submitting || !bill}
+                      className="w-full h-12 text-base bg-rose-600 hover:bg-rose-700 text-white"
+                    >
+                      {submitting ? "结账中..." : `确认买单 ${bill ? yuan(bill.totalAmount) : "—"}`}
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="rounded-lg border-2 border-dashed border-amber-600/40 bg-amber-950/20 p-3 text-center">
+                        <Printer className="h-5 w-5 text-amber-400 mx-auto mb-1" />
+                        <div className="text-xs text-amber-300 font-medium">先打印账单后才能买单</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          点击左上方「打印账单」按钮打印预结单，房台将进入「打单中」状态
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handlePrintBill}
+                        disabled={printing || !order || !bill}
+                        className="w-full h-11 bg-amber-600 hover:bg-amber-500 text-white gap-1.5"
+                      >
+                        {printing ? (
+                          <><RefreshCw className="h-4 w-4 animate-spin" /> 打印中...</>
+                        ) : (
+                          <><Printer className="h-4 w-4" /> 打印账单解锁买单</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

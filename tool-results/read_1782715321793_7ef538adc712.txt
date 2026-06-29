@@ -1,0 +1,2002 @@
+     1→// 模块：系统维护 — KTV 后台配置中心
+     2→// 8 个子页签：营业参数 / 大类管理 / 口味设置 / 赠送规则 / 人事 / 出品点设置 / 包厢设置 / 主题市场
+     3→
+     4→"use client";
+     5→
+     6→import { useEffect, useState, useMemo, useCallback } from "react";
+     7→import {
+     8→  Settings2,
+     9→  Store,
+    10→  UtensilsCrossed,
+    11→  Sparkles,
+    12→  Gift,
+    13→  UserCog,
+    14→  Palette,
+    15→  Plus,
+    16→  RefreshCw,
+    17→  Save,
+    18→  Pencil,
+    19→  Search,
+    20→  Check,
+    21→  Wine,
+    22→  Coffee,
+    23→  Candy,
+    24→  Cherry,
+    25→  ChefHat,
+    26→  Salad,
+    27→  Sandwich,
+    28→  Apple,
+    29→  Bike,
+    30→  Package,
+    31→  Download,
+    32→  TrendingUp,
+    33→  Clock,
+    34→  Tag,
+    35→  Shield,
+    36→  Users,
+    37→  Server,
+    38→  Printer,
+    39→  Monitor,
+    40→  Network,
+    41→  Building2,
+    42→  Trash2,
+    43→  MapPin,
+    44→  Percent,
+    45→  Phone,
+    46→  IdCard,
+    47→  CalendarClock,
+    48→  X,
+    49→  LayoutTemplate,
+    50→  FileText,
+    51→  QrCode,
+    52→  Image as ImageIcon,
+    53→  Copy,
+    54→  UserPlus,
+    55→  CheckCircle,
+    56→  XCircle,
+    57→} from "lucide-react";
+    58→import {
+    59→  Tabs,
+    60→  TabsContent,
+    61→  TabsList,
+    62→  TabsTrigger,
+    63→} from "@/components/ui/tabs";
+    64→import {
+    65→  Card,
+    66→  CardContent,
+    67→  CardDescription,
+    68→  CardFooter,
+    69→  CardHeader,
+    70→  CardTitle,
+    71→} from "@/components/ui/card";
+    72→import { Button } from "@/components/ui/button";
+    73→import { Badge } from "@/components/ui/badge";
+    74→import { Input } from "@/components/ui/input";
+    75→import { Label } from "@/components/ui/label";
+    76→import { Switch } from "@/components/ui/switch";
+    77→import { Separator } from "@/components/ui/separator";
+    78→import { Skeleton } from "@/components/ui/skeleton";
+    79→import { ScrollArea } from "@/components/ui/scroll-area";
+    80→import { Textarea } from "@/components/ui/textarea";
+    81→import {
+    82→  Select,
+    83→  SelectContent,
+    84→  SelectItem,
+    85→  SelectTrigger,
+    86→  SelectValue,
+    87→} from "@/components/ui/select";
+    88→import {
+    89→  Dialog,
+    90→  DialogContent,
+    91→  DialogDescription,
+    92→  DialogFooter,
+    93→  DialogHeader,
+    94→  DialogTitle,
+    95→} from "@/components/ui/dialog";
+    96→import {
+    97→  AlertDialog,
+    98→  AlertDialogAction,
+    99→  AlertDialogCancel,
+   100→  AlertDialogContent,
+   101→  AlertDialogDescription,
+   102→  AlertDialogFooter,
+   103→  AlertDialogHeader,
+   104→  AlertDialogTitle,
+   105→} from "@/components/ui/alert-dialog";
+   106→import { cn } from "@/lib/utils";
+   107→import { api } from "@/lib/api";
+   108→import { AiChatWidget } from "@/components/common/AiChatWidget";
+   109→import type {
+   110→  SysConfigInfo,
+   111→  ProductCategoryInfo,
+   112→  FlavorCategoryInfo,
+   113→  ProductInfo,
+   114→  GiftRuleInfo,
+   115→  ThemeTemplateInfo,
+   116→} from "@/lib/types";
+   117→import { useToast } from "@/hooks/use-toast";
+   118→import { fullTime } from "@/components/common/format";
+   119→
+   120→// ============ 常量 ============
+   121→
+   122→const OUTPUT_DEPTS: Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = [
+   123→  { value: "bar", label: "吧台", icon: Wine, color: "text-amber-400" },
+   124→  { value: "kitchen", label: "厨房", icon: ChefHat, color: "text-rose-400" },
+   125→  { value: "fruit", label: "水果房", icon: Apple, color: "text-emerald-400" },
+   126→  { value: "outside", label: "外卖", icon: Bike, color: "text-sky-400" },
+   127→];
+   128→
+   129→const PRODUCT_STATUS: Record<number, { label: string; className: string }> = {
+   130→  1: { label: "在售", className: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" },
+   131→  0: { label: "停售", className: "bg-rose-500/20 text-rose-300 border-rose-500/30" },
+   132→  2: { label: "估清", className: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
+   133→};
+   134→
+   135→// 大类图标 — 按类目名关键字匹配
+   136→const CATEGORY_ICON_RULES: Array<{ keys: string[]; icon: React.ComponentType<{ className?: string }>; color: string }> = [
+   137→  { keys: ["酒", "洋酒", "啤酒"], icon: Wine, color: "bg-amber-500/15 text-amber-400" },
+   138→  { keys: ["饮料", "饮品", "茶", "咖啡"], icon: Coffee, color: "bg-orange-500/15 text-orange-400" },
+   139→  { keys: ["零食", "小吃", "干果", "坚果"], icon: Candy, color: "bg-pink-500/15 text-pink-400" },
+   140→  { keys: ["水果"], icon: Cherry, color: "bg-emerald-500/15 text-emerald-400" },
+   141→  { keys: ["热菜", "炒菜", "热食"], icon: ChefHat, color: "bg-rose-500/15 text-rose-400" },
+   142→  { keys: ["凉菜", "冷菜", "冷盘"], icon: Salad, color: "bg-teal-500/15 text-teal-400" },
+   143→  { keys: ["主食", "面", "饭", "饼"], icon: Sandwich, color: "bg-yellow-500/15 text-yellow-400" },
+   144→  { keys: ["套餐", "组合", "礼包"], icon: Gift, color: "bg-violet-500/15 text-violet-400" },
+   145→];
+   146→
+   147→function pickCategoryIcon(name: string): { icon: React.ComponentType<{ className?: string }>; color: string } {
+   148→  const hit = CATEGORY_ICON_RULES.find((r) => r.keys.some((k) => name.includes(k)));
+   149→  return hit ?? { icon: Package, color: "bg-slate-500/15 text-slate-300" };
+   150→}
+   151→
+   152→// 物品行缩略图（32x32 圆角，无图隐藏）
+   153→function ProductRowThumb({ imageUrl, alt }: { imageUrl: string | null; alt: string }) {
+   154→  const [err, setErr] = useState(false);
+   155→  if (!imageUrl || err) return null;
+   156→  return (
+   157→    <img
+   158→      src={imageUrl}
+   159→      alt={alt}
+   160→      loading="lazy"
+   161→      onError={() => setErr(true)}
+   162→      className="h-8 w-8 rounded-md object-cover ring-1 ring-white/10 shrink-0"
+   163→    />
+   164→  );
+   165→}
+   166→
+   167→const THEME_TYPE_LABEL: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+   168→  room_theme: { label: "房态主题", icon: Palette, color: "from-violet-500/20 to-fuchsia-500/20" },
+   169→  product_pack: { label: "商品包", icon: Package, color: "from-emerald-500/20 to-teal-500/20" },
+   170→  bill_template: { label: "账单模板", icon: Receipt, color: "from-sky-500/20 to-cyan-500/20" },
+   171→  print_template: { label: "出品单模板", icon: Tag, color: "from-amber-500/20 to-orange-500/20" },
+   172→  member_activity: { label: "会员活动", icon: Sparkles, color: "from-rose-500/20 to-pink-500/20" },
+   173→};
+   174→
+   175→const DISPLAY_FIELDS: Array<{ key: string; label: string }> = [
+   176→  { key: "roomNo", label: "房号" },
+   177→  { key: "roomName", label: "包厢名称" },
+   178→  { key: "roomType", label: "包厢类型" },
+   179→  { key: "area", label: "区域" },
+   180→  { key: "bookingManager", label: "订房经理" },
+   181→  { key: "customerName", label: "订房人" },
+   182→  { key: "customerCount", label: "人数" },
+   183→  { key: "consume", label: "消费" },
+   184→  { key: "openedAt", label: "入客时间" },
+   185→  { key: "duration", label: "时长" },
+   186→];
+   187→
+   188→// 岗位
+   189→const POSITION_OPTIONS: Array<{ value: string; label: string; color: string }> = [
+   190→  { value: "manager", label: "经理", color: "text-rose-300 bg-rose-500/15" },
+   191→  { value: "cashier", label: "收银", color: "text-amber-300 bg-amber-500/15" },
+   192→  { value: "waiter", label: "服务员", color: "text-sky-300 bg-sky-500/15" },
+   193→  { value: "bartender", label: "吧台", color: "text-fuchsia-300 bg-fuchsia-500/15" },
+   194→  { value: "chef", label: "厨房", color: "text-orange-300 bg-orange-500/15" },
+   195→  { value: "marketing", label: "营销", color: "text-emerald-300 bg-emerald-500/15" },
+   196→];
+   197→
+   198→// 权限角色
+   199→const ROLE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
+   200→  { value: "admin", label: "管理员", desc: "全部权限" },
+   201→  { value: "manager", label: "经理", desc: "管理 + 报表" },
+   202→  { value: "cashier", label: "收银员", desc: "收银 + 开台" },
+   203→  { value: "production", label: "出品员", desc: "出品看板" },
+   204→];
+   205→
+   206→// 打印方式
+   207→const PRINT_MODE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
+   208→  { value: "client", label: "客户端打印", desc: "本机安装打印机驱动即可" },
+   209→  { value: "network", label: "网络打印机", desc: "需要配置中转服务器地址" },
+   210→];
+   211→
+   212→// 计费模式
+   213→const BILLING_MODE_OPTIONS: Array<{ value: string; label: string; color: string }> = [
+   214→  { value: "hourly", label: "计时", color: "bg-sky-500/20 text-sky-300" },
+   215→  { value: "minspend", label: "低消", color: "bg-amber-500/20 text-amber-300" },
+   216→  { value: "package", label: "开房套餐", color: "bg-emerald-500/20 text-emerald-300" },
+   217→  { value: "free", label: "免费", color: "bg-slate-700/50 text-slate-300" },
+   218→];
+   219→
+   220→// 简易 Receipt icon（lucide 没有，用占位）
+   221→function Receipt({ className }: { className?: string }) {
+   222→  return <Tag className={className} />;
+   223→}
+   224→
+   225→const positionLabel = (v: string) => POSITION_OPTIONS.find((p) => p.value === v)?.label ?? v;
+   226→const positionColor = (v: string) => POSITION_OPTIONS.find((p) => p.value === v)?.color ?? "bg-slate-700/50 text-slate-300";
+   227→const roleLabel = (v: string) => ROLE_OPTIONS.find((r) => r.value === v)?.label ?? v;
+   228→const billingLabel = (v: string) => BILLING_MODE_OPTIONS.find((b) => b.value === v)?.label ?? v;
+   229→const billingColor = (v: string) => BILLING_MODE_OPTIONS.find((b) => b.value === v)?.color ?? "bg-slate-700/50 text-slate-300";
+   230→
+   231→// ============ 主模块 ============
+   232→
+   233→export function SystemModule() {
+   234→  const [tab, setTab] = useState("business");
+   235→
+   236→  return (
+   237→    <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl overflow-hidden">
+   238→      {/* 顶部模块标题 */}
+   239→      <div className="relative px-5 md:px-8 py-6 border-b border-slate-800 bg-gradient-to-r from-slate-900 to-slate-900/50">
+   240→        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_50%)]" />
+   241→        <div className="relative flex items-start gap-4">
+   242→          <div className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-2.5 hidden sm:block">
+   243→            <Settings2 className="h-7 w-7 text-emerald-400" />
+   244→          </div>
+   245→          <div className="flex-1 min-w-0">
+   246→            <div className="flex items-center gap-2 flex-wrap">
+   247→              <h1 className="text-xl md:text-2xl font-bold text-slate-50 tracking-tight">
+   248→                系统维护中心
+   249→              </h1>
+   250→              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20">
+   251→                <Shield className="h-3 w-3 mr-1" />
+   252→                后台配置
+   253→              </Badge>
+   254→            </div>
+   255→            <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
+   256→              统一管理营业参数、大类与物品、口味、赠送规则、人事权限、出品点、包厢与主题模板。所有配置变更将实时影响前台各业务模块。
+   257→            </p>
+   258→          </div>
+   259→        </div>
+   260→      </div>
+   261→
+   262→      {/* Tabs */}
+   263→      <div className="px-3 md:px-5 pt-4 bg-slate-900/60">
+   264→        <Tabs value={tab} onValueChange={setTab}>
+   265→          <ScrollArea className="w-full whitespace-nowrap">
+   266→            <TabsList className="bg-slate-800/80 border border-slate-700/60 h-auto p-1 gap-0.5 inline-flex">
+   267→              <TabsTrigger value="business" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   268→                <Store className="h-4 w-4" /> 营业参数
+   269→              </TabsTrigger>
+   270→              <TabsTrigger value="products" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   271→                <UtensilsCrossed className="h-4 w-4" /> 大类管理
+   272→              </TabsTrigger>
+   273→              <TabsTrigger value="flavors" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   274→                <Sparkles className="h-4 w-4" /> 口味设置
+   275→              </TabsTrigger>
+   276→              <TabsTrigger value="gifts" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   277→                <Gift className="h-4 w-4" /> 赠送规则
+   278→              </TabsTrigger>
+   279→              <TabsTrigger value="employees" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   280→                <UserCog className="h-4 w-4" /> 人事
+   281→              </TabsTrigger>
+   282→              <TabsTrigger value="output-points" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   283→                <Server className="h-4 w-4" /> 出品点设置
+   284→              </TabsTrigger>
+   285→              <TabsTrigger value="rooms" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   286→                <Building2 className="h-4 w-4" /> 包厢设置
+   287→              </TabsTrigger>
+   288→              <TabsTrigger value="themes" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   289→                <Palette className="h-4 w-4" /> 主题市场
+   290→              </TabsTrigger>
+   291→              <TabsTrigger value="print-templates" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
+   292→                <LayoutTemplate className="h-4 w-4" /> 打印模板
+   293→              </TabsTrigger>
+   294→            </TabsList>
+   295→          </ScrollArea>
+   296→
+   297→          <TabsContent value="business" className="pt-4">
+   298→            <BusinessParamsTab />
+   299→          </TabsContent>
+   300→          <TabsContent value="products" className="pt-4">
+   301→            <ProductsTab />
+   302→          </TabsContent>
+   303→          <TabsContent value="flavors" className="pt-4">
+   304→            <FlavorsTab />
+   305→          </TabsContent>
+   306→          <TabsContent value="gifts" className="pt-4">
+   307→            <GiftRulesTab />
+   308→          </TabsContent>
+   309→          <TabsContent value="employees" className="pt-4">
+   310→            <EmployeesTab />
+   311→          </TabsContent>
+   312→          <TabsContent value="output-points" className="pt-4">
+   313→            <OutputPointsTab />
+   314→          </TabsContent>
+   315→          <TabsContent value="rooms" className="pt-4">
+   316→            <RoomsSettingsTab />
+   317→          </TabsContent>
+   318→          <TabsContent value="themes" className="pt-4">
+   319→            <ThemesTab />
+   320→          </TabsContent>
+   321→          <TabsContent value="print-templates" className="pt-4">
+   322→            <PrintTemplatesTab />
+   323→          </TabsContent>
+   324→        </Tabs>
+   325→      </div>
+   326→
+   327→      <AiChatWidget title="系统助手" buttonColor="bg-violet-600 hover:bg-violet-500" />
+   328→    </div>
+   329→  );
+   330→}
+   331→
+   332→// ============ 通用小组件 ============
+   333→
+   334→function DarkCard({ className, ...props }: React.ComponentProps<typeof Card>) {
+   335→  return (
+   336→    <Card
+   337→      className={cn(
+   338→        "bg-slate-800/60 border-slate-700/60 text-slate-100 backdrop-blur",
+   339→        className,
+   340→      )}
+   341→      {...props}
+   342→    />
+   343→  );
+   344→}
+   345→
+   346→function SectionTitle({ icon: Icon, title, desc, action }: {
+   347→  icon: React.ComponentType<{ className?: string }>;
+   348→  title: string;
+   349→  desc?: string;
+   350→  action?: React.ReactNode;
+   351→}) {
+   352→  return (
+   353→    <div className="flex items-start justify-between gap-3 mb-3">
+   354→      <div className="flex items-start gap-2.5 min-w-0">
+   355→        <div className="rounded-lg bg-slate-700/50 p-1.5 shrink-0">
+   356→          <Icon className="h-4 w-4 text-emerald-400" />
+   357→        </div>
+   358→        <div className="min-w-0">
+   359→          <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
+   360→          {desc && <p className="text-xs text-slate-400 mt-0.5">{desc}</p>}
+   361→        </div>
+   362→      </div>
+   363→      {action}
+   364→    </div>
+   365→  );
+   366→}
+   367→
+   368→function EmptyHint({ children }: { children: React.ReactNode }) {
+   369→  return (
+   370→    <div className="text-center py-10 text-slate-500 text-sm">
+   371→      {children}
+   372→    </div>
+   373→  );
+   374→}
+   375→
+   376→function LoadingGrid({ count = 4, className }: { count?: number; className?: string }) {
+   377→  return (
+   378→    <div className={cn("grid gap-3", className)}>
+   379→      {Array.from({ length: count }).map((_, i) => (
+   380→        <Skeleton key={i} className="h-24 w-full bg-slate-700/50" />
+   381→      ))}
+   382→    </div>
+   383→  );
+   384→}
+   385→
+   386→// ============ Tab1: 营业参数 ============
+   387→
+   388→function BusinessParamsTab() {
+   389→  const [configs, setConfigs] = useState<SysConfigInfo[]>([]);
+   390→  const [loading, setLoading] = useState(true);
+   391→  const [editing, setEditing] = useState<SysConfigInfo | null>(null);
+   392→  const { toast } = useToast();
+   393→
+   394→  const load = useCallback(async () => {
+   395→    setLoading(true);
+   396→    try {
+   397→      setConfigs(await api.getSysConfigs("system"));
+   398→    } catch (e) {
+   399→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+   400→    } finally {
+   401→      setLoading(false);
+   402→    }
+   403→  }, [toast]);
+   404→
+   405→  useEffect(() => {
+   406→    load();
+   407→  }, [load]);
+   408→
+   409→  const cfgMap = useMemo(() => {
+   410→    const m = new Map<string, SysConfigInfo>();
+   411→    configs.forEach((c) => m.set(c.configKey, c));
+   412→    return m;
+   413→  }, [configs]);
+   414→
+   415→  const currency = cfgMap.get("currency_symbol")?.configValue ?? "¥";
+   416→  const businessHours = useMemo(() => {
+   417→    const raw = cfgMap.get("business_hours")?.configValue;
+   418→    if (!raw) return { open: "18:00", close: "02:00" };
+   419→    try {
+   420→      return JSON.parse(raw) as { open: string; close: string };
+   421→    } catch {
+   422→      return { open: "18:00", close: "02:00" };
+   423→    }
+   424→  }, [cfgMap]);
+   425→
+   426→  const setCurrency = async (sym: string) => {
+   427→    if (sym === currency) return;
+   428→    try {
+   429→      await api.updateSysConfig("currency_symbol", sym);
+   430→      toast({ title: "货币符号已切换", description: `所有金额展示将使用 ${sym}` });
+   431→      load();
+   432→    } catch (e) {
+   433→      toast({ title: "切换失败", description: String(e), variant: "destructive" });
+   434→    }
+   435→  };
+   436→
+   437→  const saveBusinessHours = async (open: string, close: string) => {
+   438→    try {
+   439→      await api.updateSysConfig("business_hours", JSON.stringify({ open, close }));
+   440→      toast({ title: "营业时间已更新", description: `${open} - ${close}` });
+   441→      load();
+   442→    } catch (e) {
+   443→      toast({ title: "更新失败", description: String(e), variant: "destructive" });
+   444→    }
+   445→  };
+   446→
+   447→  const otherParams = configs.filter(
+   448→    (c) => !["currency_symbol", "business_hours", "auto_deliver"].includes(c.configKey),
+   449→  );
+   450→
+   451→  const autoDeliverCfg = cfgMap.get("auto_deliver");
+   452→  const autoDeliverOn = autoDeliverCfg?.configValue === "true";
+   453→
+   454→  const toggleAutoDeliver = async (on: boolean) => {
+   455→    try {
+   456→      await api.updateSysConfig("auto_deliver", on ? "true" : "false");
+   457→      toast({
+   458→        title: on ? "已开启出品自动送达" : "已关闭出品自动送达",
+   459→        description: on
+   460→          ? "收银点单的商品将自动标记为已送达"
+   461→          : "商品将按正常出品流程出单",
+   462→      });
+   463→      load();
+   464→    } catch (e) {
+   465→      toast({ title: "切换失败", description: String(e), variant: "destructive" });
+   466→    }
+   467→  };
+   468→
+   469→  return (
+   470→    <div className="space-y-4 pb-6">
+   471→      <div className="grid gap-4 lg:grid-cols-2">
+   472→        <DarkCard>
+   473→          <CardHeader className="pb-3">
+   474→            <div className="flex items-center gap-2">
+   475→              <div className="rounded-md bg-amber-500/15 p-1.5">
+   476→                <span className="text-amber-400 font-bold text-sm">¥</span>
+   477→              </div>
+   478→              <div>
+   479→                <CardTitle className="text-base text-slate-100">货币符号</CardTitle>
+   480→                <CardDescription className="text-slate-400 text-xs">
+   481→                  切换全系统金额展示符号
+   482→                </CardDescription>
+   483→              </div>
+   484→            </div>
+   485→          </CardHeader>
+   486→          <CardContent>
+   487→            <div className="grid grid-cols-2 gap-3">
+   488→              <button
+   489→                onClick={() => setCurrency("¥")}
+   490→                className={cn(
+   491→                  "rounded-xl border-2 p-5 text-center transition-all hover:scale-[1.02]",
+   492→                  currency === "¥"
+   493→                    ? "border-emerald-500 bg-emerald-500/15 shadow-lg shadow-emerald-500/20"
+   494→                    : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
+   495→                )}
+   496→              >
+   497→                <div className={cn("text-4xl font-bold", currency === "¥" ? "text-emerald-300" : "text-slate-400")}>¥</div>
+   498→                <div className="mt-1 text-xs text-slate-400">人民币</div>
+   499→                {currency === "¥" && (
+   500→                  <Badge className="mt-2 bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+   501→                    <Check className="h-3 w-3 mr-1" /> 已启用
+   502→                  </Badge>
+   503→                )}
+   504→              </button>
+   505→              <button
+   506→                onClick={() => setCurrency("$")}
+   507→                className={cn(
+   508→                  "rounded-xl border-2 p-5 text-center transition-all hover:scale-[1.02]",
+   509→                  currency === "$"
+   510→                    ? "border-emerald-500 bg-emerald-500/15 shadow-lg shadow-emerald-500/20"
+   511→                    : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
+   512→                )}
+   513→              >
+   514→                <div className={cn("text-4xl font-bold", currency === "$" ? "text-emerald-300" : "text-slate-400")}>$</div>
+   515→                <div className="mt-1 text-xs text-slate-400">美元</div>
+   516→                {currency === "$" && (
+   517→                  <Badge className="mt-2 bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+   518→                    <Check className="h-3 w-3 mr-1" /> 已启用
+   519→                  </Badge>
+   520→                )}
+   521→              </button>
+   522→            </div>
+   523→          </CardContent>
+   524→        </DarkCard>
+   525→
+   526→        <DarkCard>
+   527→          <CardHeader className="pb-3">
+   528→            <div className="flex items-center gap-2">
+   529→              <div className="rounded-md bg-sky-500/15 p-1.5">
+   530→                <Clock className="h-4 w-4 text-sky-400" />
+   531→              </div>
+   532→              <div>
+   533→                <CardTitle className="text-base text-slate-100">营业时间</CardTitle>
+   534→                <CardDescription className="text-slate-400 text-xs">
+   535→                  跨日营业场景支持（如 18:00 - 次日 02:00）
+   536→                </CardDescription>
+   537→              </div>
+   538→            </div>
+   539→          </CardHeader>
+   540→          <CardContent>
+   541→            <BusinessHoursEditor
+   542→              open={businessHours.open}
+   543→              close={businessHours.close}
+   544→              onSave={saveBusinessHours}
+   545→            />
+   546→          </CardContent>
+   547→        </DarkCard>
+   548→      </div>
+   549→
+   550→      {/* 出品自动送达开关 */}
+   551→      <DarkCard className="border-emerald-700/40">
+   552→        <CardContent className="p-4">
+   553→          <div className="flex items-start justify-between gap-4">
+   554→            <div className="flex items-start gap-3 min-w-0">
+   555→              <div className={cn(
+   556→                "rounded-lg p-2.5 shrink-0 transition-colors",
+   557→                autoDeliverOn ? "bg-emerald-500/20" : "bg-slate-700/50",
+   558→              )}>
+   559→                <Package className={cn("h-5 w-5", autoDeliverOn ? "text-emerald-300" : "text-slate-400")} />
+   560→              </div>
+   561→              <div className="min-w-0">
+   562→                <div className="flex items-center gap-2 flex-wrap">
+   563→                  <h3 className="text-sm font-semibold text-slate-100">出品自动送达</h3>
+   564→                  <Badge
+   565→                    className={
+   566→                      autoDeliverOn
+   567→                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+   568→                        : "bg-slate-700/50 text-slate-400 border-slate-600/50"
+   569→                    }
+   570→                  >
+   571→                    {autoDeliverOn ? "已开启" : "已关闭"}
+   572→                  </Badge>
+   573→                </div>
+   574→                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+   575→                  开启后，收银点单的商品会自动标记为已送达，跳过出品系统的出单环节。适合不需要出品流程的小场所。
+   576→                </p>
+   577→              </div>
+   578→            </div>
+   579→            <Switch
+   580→              checked={autoDeliverOn}
+   581→              onCheckedChange={toggleAutoDeliver}
+   582→              className="data-[state=checked]:bg-emerald-600 shrink-0"
+   583→            />
+   584→          </div>
+   585→        </CardContent>
+   586→      </DarkCard>
+   587→
+   588→      <DarkCard>
+   589→        <CardHeader className="pb-3">
+   590→          <SectionTitle
+   591→            icon={Settings2}
+   592→            title="其他营业参数"
+   593→            desc="服务费率、税率、出品模式、抹零方式、自动赠送等"
+   594→            action={
+   595→              <Button size="sm" variant="ghost" onClick={load} className="text-slate-300 hover:text-slate-100 hover:bg-slate-700/50 gap-1">
+   596→                <RefreshCw className="h-3.5 w-3.5" /> 刷新
+   597→              </Button>
+   598→            }
+   599→          />
+   600→        </CardHeader>
+   601→        <CardContent>
+   602→          {loading ? (
+   603→            <LoadingGrid count={4} className="grid-cols-1 md:grid-cols-2" />
+   604→          ) : (
+   605→            <div className="grid gap-2.5 md:grid-cols-2">
+   606→              {otherParams.map((c) => (
+   607→                <BusinessParamCard key={c.id} config={c} onEdit={() => setEditing(c)} />
+   608→              ))}
+   609→              {otherParams.length === 0 && (
+   610→                <EmptyHint>暂无其他参数</EmptyHint>
+   611→              )}
+   612→            </div>
+   613→          )}
+   614→        </CardContent>
+   615→      </DarkCard>
+   616→
+   617→      <EditConfigDialog
+   618→        config={editing}
+   619→        onClose={() => setEditing(null)}
+   620→        onSaved={() => {
+   621→          setEditing(null);
+   622→          load();
+   623→        }}
+   624→      />
+   625→    </div>
+   626→  );
+   627→}
+   628→
+   629→function BusinessHoursEditor({ open, close, onSave }: {
+   630→  open: string;
+   631→  close: string;
+   632→  onSave: (open: string, close: string) => void;
+   633→}) {
+   634→  const [o, setO] = useState(open);
+   635→  const [c, setC] = useState(close);
+   636→
+   637→  useEffect(() => {
+   638→    // eslint-disable-next-line react-hooks/set-state-in-effect
+   639→    setO(open);
+   640→    setC(close);
+   641→  }, [open, close]);
+   642→
+   643→  return (
+   644→    <div className="space-y-3">
+   645→      <div className="grid grid-cols-2 gap-3">
+   646→        <div>
+   647→          <Label className="text-xs text-slate-400">开门时间</Label>
+   648→          <Input
+   649→            type="time"
+   650→            value={o}
+   651→            onChange={(e) => setO(e.target.value)}
+   652→            className="bg-slate-900/60 border-slate-700 text-slate-100 mt-1"
+   653→          />
+   654→        </div>
+   655→        <div>
+   656→          <Label className="text-xs text-slate-400">打烊时间</Label>
+   657→          <Input
+   658→            type="time"
+   659→            value={c}
+   660→            onChange={(e) => setC(e.target.value)}
+   661→            className="bg-slate-900/60 border-slate-700 text-slate-100 mt-1"
+   662→          />
+   663→        </div>
+   664→      </div>
+   665→      <Button
+   666→        size="sm"
+   667→        onClick={() => onSave(o, c)}
+   668→        disabled={o === open && c === close}
+   669→        className="w-full gap-1 bg-emerald-600 hover:bg-emerald-500"
+   670→      >
+   671→        <Save className="h-3.5 w-3.5" /> 保存营业时间
+   672→      </Button>
+   673→    </div>
+   674→  );
+   675→}
+   676→
+   677→function BusinessParamCard({ config, onEdit }: {
+   678→  config: SysConfigInfo;
+   679→  onEdit: () => void;
+   680→}) {
+   681→  const labelMap: Record<string, string> = {
+   682→    store_name: "门店名称",
+   683→    tax_rate: "税率",
+   684→    service_charge: "服务费率",
+   685→    round_mode: "抹零方式",
+   686→    output_mode: "出品模式",
+   687→    output_print_count: "出品单打印次数",
+   688→    order_gift_enabled: "自动赠送",
+   689→    order_flavor_required: "必选口味强制弹出",
+   690→  };
+   691→  const label = labelMap[config.configKey] ?? config.configKey;
+   692→
+   693→  const isBool = config.configValue === "true" || config.configValue === "false";
+   694→  const isAuto = config.configValue === "auto" || config.configValue === "manual";
+   695→
+   696→  return (
+   697→    <div className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3 hover:border-slate-600 transition-colors">
+   698→      <div className="flex items-start justify-between gap-2 mb-2">
+   699→        <div className="min-w-0">
+   700→          <div className="text-sm font-medium text-slate-100">{label}</div>
+   701→          <div className="text-xs text-slate-500 mt-0.5 truncate">{config.description ?? config.configKey}</div>
+   702→        </div>
+   703→        <Button size="sm" variant="ghost" onClick={onEdit} className="text-slate-400 hover:text-emerald-300 hover:bg-slate-700/50 h-7 w-7 p-0">
+   704→          <Pencil className="h-3.5 w-3.5" />
+   705→        </Button>
+   706→      </div>
+   707→      <div className="flex items-center gap-2">
+   708→        {isBool ? (
+   709→          <Badge className={config.configValue === "true" ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-700/50 text-slate-400 border-slate-600/50"}>
+   710→            {config.configValue === "true" ? "已启用" : "已停用"}
+   711→          </Badge>
+   712→        ) : isAuto ? (
+   713→          <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30">
+   714→            {config.configValue === "auto" ? "自动出品" : "手动出品"}
+   715→          </Badge>
+   716→        ) : (
+   717→          <span className="font-mono text-sm text-emerald-300 truncate">{config.configValue}</span>
+   718→        )}
+   719→      </div>
+   720→    </div>
+   721→  );
+   722→}
+   723→
+   724→function EditConfigDialog({ config, onClose, onSaved }: {
+   725→  config: SysConfigInfo | null;
+   726→  onClose: () => void;
+   727→  onSaved: () => void;
+   728→}) {
+   729→  const [value, setValue] = useState("");
+   730→  const [saving, setSaving] = useState(false);
+   731→  const { toast } = useToast();
+   732→
+   733→  useEffect(() => {
+   734→    setValue(config?.configValue ?? "");
+   735→  }, [config]);
+   736→
+   737→  const save = async () => {
+   738→    if (!config) return;
+   739→    setSaving(true);
+   740→    try {
+   741→      await api.updateSysConfig(config.configKey, value);
+   742→      toast({ title: "参数已更新", description: `${config.configKey} = ${value}` });
+   743→      onSaved();
+   744→    } catch (e) {
+   745→      toast({ title: "保存失败", description: String(e), variant: "destructive" });
+   746→    } finally {
+   747→      setSaving(false);
+   748→    }
+   749→  };
+   750→
+   751→  const isBool = config?.configValue === "true" || config?.configValue === "false";
+   752→
+   753→  return (
+   754→    <Dialog open={!!config} onOpenChange={(v) => !v && onClose()}>
+   755→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md">
+   756→        <DialogHeader>
+   757→          <DialogTitle className="text-slate-100">编辑参数 · {config?.configKey}</DialogTitle>
+   758→          <DialogDescription className="text-slate-400">
+   759→            {config?.description}
+   760→          </DialogDescription>
+   761→        </DialogHeader>
+   762→        <div className="py-2 space-y-3">
+   763→          {isBool ? (
+   764→            <div className="flex items-center gap-3">
+   765→              <Switch
+   766→                checked={value === "true"}
+   767→                onCheckedChange={(c) => setValue(c ? "true" : "false")}
+   768→              />
+   769→              <Label className="text-slate-300">{value === "true" ? "启用" : "停用"}</Label>
+   770→            </div>
+   771→          ) : (
+   772→            <div className="space-y-1.5">
+   773→              <Label className="text-xs text-slate-400">参数值</Label>
+   774→              <Textarea
+   775→                value={value}
+   776→                onChange={(e) => setValue(e.target.value)}
+   777→                rows={4}
+   778→                className="bg-slate-800/60 border-slate-700 text-slate-100 font-mono"
+   779→              />
+   780→            </div>
+   781→          )}
+   782→          <div className="text-xs text-slate-500">
+   783→            更新于 {fullTime(config?.updatedAt ?? null)}
+   784→          </div>
+   785→        </div>
+   786→        <DialogFooter>
+   787→          <Button variant="ghost" onClick={onClose} className="text-slate-300 hover:bg-slate-800">
+   788→            取消
+   789→          </Button>
+   790→          <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+   791→            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+   792→            保存
+   793→          </Button>
+   794→        </DialogFooter>
+   795→      </DialogContent>
+   796→    </Dialog>
+   797→  );
+   798→}
+   799→
+   800→// ============ Tab2: 大类管理（原菜品管理）============
+   801→
+   802→function ProductsTab() {
+   803→  const [categories, setCategories] = useState<ProductCategoryInfo[]>([]);
+   804→  const [products, setProducts] = useState<ProductInfo[]>([]);
+   805→  const [loading, setLoading] = useState(true);
+   806→  const [selectedCat, setSelectedCat] = useState<string>("");
+   807→  const [keyword, setKeyword] = useState("");
+   808→  const [deptFilter, setDeptFilter] = useState<string>("all");
+   809→  const [editingProduct, setEditingProduct] = useState<ProductInfo | null>(null);
+   810→  const [addingCategory, setAddingCategory] = useState(false);
+   811→  const [addingProductTo, setAddingProductTo] = useState<ProductCategoryInfo | null>(null);
+   812→  const { toast } = useToast();
+   813→
+   814→  const load = useCallback(async () => {
+   815→    setLoading(true);
+   816→    try {
+   817→      const [cats, pros] = await Promise.all([api.getCategories(), api.getProducts()]);
+   818→      setCategories(cats);
+   819→      setProducts(pros);
+   820→      if (cats.length > 0 && !selectedCat) setSelectedCat(cats[0].id);
+   821→    } catch (e) {
+   822→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+   823→    } finally {
+   824→      setLoading(false);
+   825→    }
+   826→  }, [toast, selectedCat]);
+   827→
+   828→  useEffect(() => {
+   829→    load();
+   830→  }, []);
+   831→
+   832→  const filteredProducts = useMemo(() => {
+   833→    return products.filter((p) => {
+   834→      if (selectedCat && p.categoryId !== selectedCat) return false;
+   835→      if (deptFilter !== "all" && p.outputDept !== deptFilter) return false;
+   836→      if (keyword && !p.name.toLowerCase().includes(keyword.toLowerCase())) return false;
+   837→      return true;
+   838→    });
+   839→  }, [products, selectedCat, deptFilter, keyword]);
+   840→
+   841→  const selectedCategory = useMemo(
+   842→    () => categories.find((c) => c.id === selectedCat) ?? null,
+   843→    [categories, selectedCat],
+   844→  );
+   845→
+   846→  const handleToggleStatus = async (p: ProductInfo) => {
+   847→    const next = p.status === 1 ? 0 : 1;
+   848→    try {
+   849→      await api.updateProduct({ id: p.id, status: next });
+   850→      toast({ title: next === 1 ? "已上架" : "已下架", description: p.name });
+   851→      load();
+   852→    } catch (e) {
+   853→      toast({ title: "操作失败", description: String(e), variant: "destructive" });
+   854→    }
+   855→  };
+   856→
+   857→  const handleQuickUpdate = async (p: ProductInfo, field: "price" | "stock", value: number) => {
+   858→    try {
+   859→      await api.updateProduct({ id: p.id, [field]: value });
+   860→      toast({ title: "已更新", description: `${p.name} ${field === "price" ? "价格" : "库存"} = ${value}` });
+   861→      load();
+   862→    } catch (e) {
+   863→      toast({ title: "更新失败", description: String(e), variant: "destructive" });
+   864→    }
+   865→  };
+   866→
+   867→  return (
+   868→    <div className="pb-6 grid gap-4 lg:grid-cols-[300px_1fr]">
+   869→      {/* 左侧大类列表 */}
+   870→      <DarkCard className="h-fit lg:sticky lg:top-4">
+   871→        <CardHeader className="pb-3">
+   872→          <SectionTitle
+   873→            icon={Package}
+   874→            title="菜品大类"
+   875→            desc={`${categories.length} 个大类 · 点击查看物品`}
+   876→            action={
+   877→              <Button size="sm" onClick={() => setAddingCategory(true)} className="bg-emerald-600 hover:bg-emerald-500 h-7 w-7 p-0">
+   878→                <Plus className="h-4 w-4" />
+   879→              </Button>
+   880→            }
+   881→          />
+   882→        </CardHeader>
+   883→        <CardContent className="pt-0">
+   884→          {loading ? (
+   885→            <div className="space-y-2">
+   886→              {Array.from({ length: 6 }).map((_, i) => (
+   887→                <Skeleton key={i} className="h-16 w-full bg-slate-700/50" />
+   888→              ))}
+   889→            </div>
+   890→          ) : (
+   891→            <ScrollArea className="max-h-[560px] pr-1">
+   892→              <div className="space-y-2">
+   893→                <button
+   894→                  onClick={() => setSelectedCat("")}
+   895→                  className={cn(
+   896→                    "w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors border",
+   897→                    !selectedCat
+   898→                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+   899→                      : "text-slate-300 hover:bg-slate-700/50 border-transparent",
+   900→                  )}
+   901→                >
+   902→                  <div className="flex items-center justify-between gap-2">
+   903→                    <span className="font-medium">全部物品</span>
+   904→                    <Badge variant="outline" className="bg-slate-700/50 border-slate-600 text-slate-300">
+   905→                      {products.length}
+   906→                    </Badge>
+   907→                  </div>
+   908→                </button>
+   909→                {categories.map((c) => {
+   910→                  const active = selectedCat === c.id;
+   911→                  const catIcon = pickCategoryIcon(c.name);
+   912→                  const CatIcon = catIcon.icon;
+   913→                  return (
+   914→                    <div
+   915→                      key={c.id}
+   916→                      className={cn(
+   917→                        "rounded-md border p-3 transition-colors",
+   918→                        active
+   919→                          ? "bg-emerald-500/15 border-emerald-500/40"
+   920→                          : "bg-slate-800/40 border-slate-700/50 hover:border-slate-600",
+   921→                      )}
+   922→                    >
+   923→                      <div className="flex items-start justify-between gap-2">
+   924→                        <div className="flex items-start gap-2 flex-1 min-w-0">
+   925→                          {/* 大类图标色块 */}
+   926→                          <span
+   927→                            className={cn(
+   928→                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+   929→                              catIcon.color,
+   930→                            )}
+   931→                          >
+   932→                            <CatIcon className="h-4 w-4" />
+   933→                          </span>
+   934→                          <button
+   935→                            onClick={() => setSelectedCat(c.id)}
+   936→                            className="flex-1 min-w-0 text-left"
+   937→                          >
+   938→                            <div className={cn("font-medium truncate", active ? "text-emerald-300" : "text-slate-200")}>
+   939→                              {c.name}
+   940→                            </div>
+   941→                            <div className="text-xs text-slate-500 mt-0.5">
+   942→                              {c.productCount} 个物品
+   943→                            </div>
+   944→                          </button>
+   945→                        </div>
+   946→                        {/* 右上角「+ 添加物品」按钮 — 用户反馈加号不够明显 */}
+   947→                        <Button
+   948→                          size="sm"
+   949→                          onClick={() => setAddingProductTo(c)}
+   950→                          className={cn(
+   951→                            "h-7 px-2 gap-1 shrink-0",
+   952→                            active
+   953→                              ? "bg-emerald-600 hover:bg-emerald-500"
+   954→                              : "bg-slate-700/60 hover:bg-slate-700 text-slate-200",
+   955→                          )}
+   956→                        >
+   957→                          <Plus className="h-3.5 w-3.5" /> 添加物品
+   958→                        </Button>
+   959→                      </div>
+   960→                    </div>
+   961→                  );
+   962→                })}
+   963→              </div>
+   964→            </ScrollArea>
+   965→          )}
+   966→        </CardContent>
+   967→      </DarkCard>
+   968→
+   969→      {/* 右侧物品列表 */}
+   970→      <DarkCard>
+   971→        <CardHeader className="pb-3">
+   972→          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+   973→            <div className="text-sm font-semibold text-slate-100">
+   974→              {selectedCategory ? (
+   975→                <span className="flex items-center gap-2">
+   976→                  <Package className="h-4 w-4 text-emerald-400" />
+   977→                  {selectedCategory.name}
+   978→                  <Badge variant="outline" className="bg-slate-700/50 border-slate-600 text-slate-300">
+   979→                    {filteredProducts.length} 项
+   980→                  </Badge>
+   981→                </span>
+   982→              ) : (
+   983→                <span>全部物品</span>
+   984→              )}
+   985→            </div>
+   986→            <div className="flex-1" />
+   987→            <div className="relative flex-1 min-w-[180px]">
+   988→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+   989→              <Input
+   990→                placeholder="搜索物品名称..."
+   991→                value={keyword}
+   992→                onChange={(e) => setKeyword(e.target.value)}
+   993→                className="pl-9 bg-slate-900/60 border-slate-700 text-slate-100"
+   994→              />
+   995→            </div>
+   996→            <Select value={deptFilter} onValueChange={setDeptFilter}>
+   997→              <SelectTrigger className="w-full sm:w-40 bg-slate-900/60 border-slate-700 text-slate-100">
+   998→                <SelectValue placeholder="出品部门" />
+   999→              </SelectTrigger>
+  1000→              <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+  1001→                <SelectItem value="all">全部部门</SelectItem>
+  1002→                {OUTPUT_DEPTS.map((d) => (
+  1003→                  <SelectItem key={d.value} value={d.value}>
+  1004→                    <span className="flex items-center gap-1.5">
+  1005→                      <d.icon className={cn("h-3.5 w-3.5", d.color)} /> {d.label}
+  1006→                    </span>
+  1007→                  </SelectItem>
+  1008→                ))}
+  1009→              </SelectContent>
+  1010→            </Select>
+  1011→            <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
+  1012→              <RefreshCw className="h-3.5 w-3.5" /> 刷新
+  1013→            </Button>
+  1014→            {selectedCategory && (
+  1015→              <Button
+  1016→                onClick={() => setAddingProductTo(selectedCategory)}
+  1017→                className="bg-emerald-600 hover:bg-emerald-500 gap-1"
+  1018→              >
+  1019→                <Plus className="h-4 w-4" /> 添加物品
+  1020→              </Button>
+  1021→            )}
+  1022→          </div>
+  1023→        </CardHeader>
+  1024→        <CardContent>
+  1025→          {loading ? (
+  1026→            <LoadingGrid count={5} />
+  1027→          ) : filteredProducts.length === 0 ? (
+  1028→            <EmptyHint>
+  1029→              {selectedCategory ? (
+  1030→                <div className="space-y-2">
+  1031→                  <div>该大类下暂无物品</div>
+  1032→                  <Button size="sm" onClick={() => setAddingProductTo(selectedCategory)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1033→                    <Plus className="h-4 w-4" /> 添加第一个物品
+  1034→                  </Button>
+  1035→                </div>
+  1036→              ) : (
+  1037→                "暂无符合条件的物品"
+  1038→              )}
+  1039→            </EmptyHint>
+  1040→          ) : (
+  1041→            <div className="rounded-lg border border-slate-700/60 overflow-hidden">
+  1042→              <ScrollArea className="max-h-[560px]">
+  1043→                <table className="w-full text-sm">
+  1044→                  <thead className="bg-slate-800/80 sticky top-0 backdrop-blur z-10">
+  1045→                    <tr className="text-left text-slate-400 text-xs">
+  1046→                      <th className="px-3 py-2 font-medium">物品</th>
+  1047→                      <th className="px-3 py-2 font-medium">出品部门</th>
+  1048→                      <th className="px-3 py-2 font-medium text-right">价格</th>
+  1049→                      <th className="px-3 py-2 font-medium text-center hidden sm:table-cell">低消</th>
+  1050→                      <th className="px-3 py-2 font-medium text-center hidden md:table-cell">套餐</th>
+  1051→                      <th className="px-3 py-2 font-medium text-right hidden sm:table-cell">库存</th>
+  1052→                      <th className="px-3 py-2 font-medium text-center">状态</th>
+  1053→                      <th className="px-3 py-2 font-medium text-right">操作</th>
+  1054→                    </tr>
+  1055→                  </thead>
+  1056→                  <tbody>
+  1057→                    {filteredProducts.map((p) => {
+  1058→                      const dept = OUTPUT_DEPTS.find((d) => d.value === p.outputDept);
+  1059→                      const DeptIcon = dept?.icon ?? Wine;
+  1060→                      const status = PRODUCT_STATUS[p.status] ?? PRODUCT_STATUS[1];
+  1061→                      return (
+  1062→                        <tr key={p.id} className="border-t border-slate-700/40 hover:bg-slate-800/50 transition-colors">
+  1063→                          <td className="px-3 py-2.5">
+  1064→                            <div className="flex items-center gap-2">
+  1065→                              {/* 商品缩略图 32x32（无图隐藏） */}
+  1066→                              <ProductRowThumb imageUrl={p.imageUrl} alt={p.name} />
+  1067→                              <div className="min-w-0">
+  1068→                                <div className="font-medium text-slate-100 flex items-center gap-1.5">
+  1069→                                  <span className="truncate">{p.name}</span>
+  1070→                                  {p.isPackage && (
+  1071→                                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] px-1.5 py-0 shrink-0">
+  1072→                                      <Package className="h-2.5 w-2.5 mr-0.5" />套餐
+  1073→                                    </Badge>
+  1074→                                  )}
+  1075→                                </div>
+  1076→                                {p.flavors.length > 0 && (
+  1077→                                  <div className="text-xs text-slate-500 mt-0.5">
+  1078→                                    口味: {p.flavors.map((f) => f.categoryName).filter((v, i, a) => a.indexOf(v) === i).join(" / ")}
+  1079→                                  </div>
+  1080→                                )}
+  1081→                              </div>
+  1082→                            </div>
+  1083→                          </td>
+  1084→                          <td className="px-3 py-2.5">
+  1085→                            <span className={cn("inline-flex items-center gap-1 text-xs", dept?.color ?? "text-amber-400")}>
+  1086→                              <DeptIcon className="h-3.5 w-3.5" />
+  1087→                              {dept?.label ?? p.outputDept}
+  1088→                            </span>
+  1089→                          </td>
+  1090→                          <td className="px-3 py-2.5 text-right">
+  1091→                            <InlineEdit
+  1092→                              value={p.price}
+  1093→                              onSave={(v) => handleQuickUpdate(p, "price", v)}
+  1094→                              format={(v) => `¥${v.toFixed(2)}`}
+  1095→                            />
+  1096→                          </td>
+  1097→                          <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+  1098→                            {p.countToMinSpend ? (
+  1099→                              <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-[10px]">计入</Badge>
+  1100→                            ) : (
+  1101→                              <Badge className="bg-slate-700/50 text-slate-400 border-slate-600/50 text-[10px]">不计</Badge>
+  1102→                            )}
+  1103→                          </td>
+  1104→                          <td className="px-3 py-2.5 text-center hidden md:table-cell">
+  1105→                            {p.isPackage ? (
+  1106→                              <span className="text-emerald-300 font-mono text-xs">¥{p.packagePrice.toFixed(2)}</span>
+  1107→                            ) : (
+  1108→                              <span className="text-slate-600 text-xs">—</span>
+  1109→                            )}
+  1110→                          </td>
+  1111→                          <td className="px-3 py-2.5 text-right hidden sm:table-cell">
+  1112→                            <InlineEdit
+  1113→                              value={p.stock}
+  1114→                              onSave={(v) => handleQuickUpdate(p, "stock", v)}
+  1115→                              format={(v) => v >= 999 ? "∞" : String(v)}
+  1116→                            />
+  1117→                          </td>
+  1118→                          <td className="px-3 py-2.5 text-center">
+  1119→                            <Badge variant="outline" className={status.className}>
+  1120→                              {status.label}
+  1121→                            </Badge>
+  1122→                          </td>
+  1123→                          <td className="px-3 py-2.5 text-right">
+  1124→                            <div className="flex items-center justify-end gap-1">
+  1125→                              <Button
+  1126→                                size="sm"
+  1127→                                variant="ghost"
+  1128→                                onClick={() => handleToggleStatus(p)}
+  1129→                                className="h-7 px-2 text-slate-400 hover:text-emerald-300 hover:bg-slate-700/50"
+  1130→                              >
+  1131→                                {p.status === 1 ? "下架" : "上架"}
+  1132→                              </Button>
+  1133→                              <Button
+  1134→                                size="sm"
+  1135→                                variant="ghost"
+  1136→                                onClick={() => setEditingProduct(p)}
+  1137→                                className="h-7 w-7 p-0 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50"
+  1138→                              >
+  1139→                                <Pencil className="h-3.5 w-3.5" />
+  1140→                              </Button>
+  1141→                            </div>
+  1142→                          </td>
+  1143→                        </tr>
+  1144→                      );
+  1145→                    })}
+  1146→                  </tbody>
+  1147→                </table>
+  1148→              </ScrollArea>
+  1149→            </div>
+  1150→          )}
+  1151→        </CardContent>
+  1152→      </DarkCard>
+  1153→
+  1154→      <AddCategoryDialog
+  1155→        open={addingCategory}
+  1156→        onClose={() => setAddingCategory(false)}
+  1157→        onSaved={() => {
+  1158→          setAddingCategory(false);
+  1159→          load();
+  1160→        }}
+  1161→      />
+  1162→      <AddProductDialog
+  1163→        category={addingProductTo}
+  1164→        allProducts={products}
+  1165→        categories={categories}
+  1166→        onClose={() => setAddingProductTo(null)}
+  1167→        onSaved={() => {
+  1168→          setAddingProductTo(null);
+  1169→          load();
+  1170→        }}
+  1171→      />
+  1172→      <EditProductDialog
+  1173→        product={editingProduct}
+  1174→        allProducts={products}
+  1175→        categories={categories}
+  1176→        onClose={() => setEditingProduct(null)}
+  1177→        onSaved={() => {
+  1178→          setEditingProduct(null);
+  1179→          load();
+  1180→        }}
+  1181→      />
+  1182→    </div>
+  1183→  );
+  1184→}
+  1185→
+  1186→function InlineEdit({ value, onSave, format }: {
+  1187→  value: number;
+  1188→  onSave: (v: number) => void;
+  1189→  format: (v: number) => string;
+  1190→}) {
+  1191→  const [editing, setEditing] = useState(false);
+  1192→  const [draft, setDraft] = useState(String(value));
+  1193→
+  1194→  useEffect(() => {
+  1195→    setDraft(String(value));
+  1196→  }, [value]);
+  1197→
+  1198→  if (editing) {
+  1199→    return (
+  1200→      <Input
+  1201→        autoFocus
+  1202→        type="number"
+  1203→        value={draft}
+  1204→        onChange={(e) => setDraft(e.target.value)}
+  1205→        onBlur={() => {
+  1206→          setEditing(false);
+  1207→          const n = Number(draft);
+  1208→          if (!isNaN(n) && n !== value) onSave(n);
+  1209→        }}
+  1210→        onKeyDown={(e) => {
+  1211→          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+  1212→          if (e.key === "Escape") {
+  1213→            setDraft(String(value));
+  1214→            setEditing(false);
+  1215→          }
+  1216→        }}
+  1217→        className="h-7 w-20 bg-slate-900/60 border-slate-700 text-slate-100 text-right"
+  1218→      />
+  1219→    );
+  1220→  }
+  1221→  return (
+  1222→    <button
+  1223→      onClick={() => setEditing(true)}
+  1224→      className="font-mono text-slate-200 hover:text-emerald-300 hover:bg-slate-700/40 rounded px-1.5 py-0.5 transition-colors"
+  1225→    >
+  1226→      {format(value)}
+  1227→    </button>
+  1228→  );
+  1229→}
+  1230→
+  1231→function AddCategoryDialog({ open, onClose, onSaved }: {
+  1232→  open: boolean;
+  1233→  onClose: () => void;
+  1234→  onSaved: () => void;
+  1235→}) {
+  1236→  const [name, setName] = useState("");
+  1237→  const [saving, setSaving] = useState(false);
+  1238→  const { toast } = useToast();
+  1239→
+  1240→  useEffect(() => {
+  1241→    if (open) setName("");
+  1242→  }, [open]);
+  1243→
+  1244→  const save = async () => {
+  1245→    if (!name.trim()) return;
+  1246→    setSaving(true);
+  1247→    try {
+  1248→      await api.createCategory(name.trim());
+  1249→      toast({ title: "大类已创建", description: name.trim() });
+  1250→      onSaved();
+  1251→    } catch (e) {
+  1252→      toast({ title: "创建失败", description: String(e), variant: "destructive" });
+  1253→    } finally {
+  1254→      setSaving(false);
+  1255→    }
+  1256→  };
+  1257→
+  1258→  return (
+  1259→    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+  1260→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-sm">
+  1261→        <DialogHeader>
+  1262→          <DialogTitle className="text-slate-100">新建菜品大类</DialogTitle>
+  1263→          <DialogDescription className="text-slate-400">例如：酒水 / 饮料 / 零食 / 套餐</DialogDescription>
+  1264→        </DialogHeader>
+  1265→        <div className="py-2">
+  1266→          <Label className="text-xs text-slate-400">大类名称</Label>
+  1267→          <Input
+  1268→            value={name}
+  1269→            onChange={(e) => setName(e.target.value)}
+  1270→            placeholder="输入大类名称"
+  1271→            className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1272→          />
+  1273→        </div>
+  1274→        <DialogFooter>
+  1275→          <Button variant="ghost" onClick={onClose} className="text-slate-300 hover:bg-slate-800">取消</Button>
+  1276→          <Button onClick={save} disabled={saving || !name.trim()} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1277→            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+  1278→            创建
+  1279→          </Button>
+  1280→        </DialogFooter>
+  1281→      </DialogContent>
+  1282→    </Dialog>
+  1283→  );
+  1284→}
+  1285→
+  1286→// 解析 packageItems
+  1287→function parsePackageItems(raw: string | null): Array<{ productId: string; name: string; qty: number }> {
+  1288→  if (!raw) return [];
+  1289→  try {
+  1290→    const arr = JSON.parse(raw);
+  1291→    if (Array.isArray(arr)) return arr as Array<{ productId: string; name: string; qty: number }>;
+  1292→  } catch {
+  1293→    /* ignore */
+  1294→  }
+  1295→  return [];
+  1296→}
+  1297→
+  1298→// 通用：物品编辑/新建表单（含 计入最低消费 + 套餐 + 子商品）
+  1299→function ProductFormFields({
+  1300→  name, setName,
+  1301→  price, setPrice,
+  1302→  stock, setStock,
+  1303→  status, setStatus,
+  1304→  outputDept, setOutputDept,
+  1305→  countToMinSpend, setCountToMinSpend,
+  1306→  isPackage, setIsPackage,
+  1307→  packagePrice, setPackagePrice,
+  1308→  packageItemDrafts, setPackageItemDrafts,
+  1309→  allProducts,
+  1310→  selfId,
+  1311→}: {
+  1312→  name: string; setName: (v: string) => void;
+  1313→  price: number; setPrice: (v: number) => void;
+  1314→  stock: number; setStock: (v: number) => void;
+  1315→  status: number; setStatus: (v: number) => void;
+  1316→  outputDept: string; setOutputDept: (v: string) => void;
+  1317→  countToMinSpend: boolean; setCountToMinSpend: (v: boolean) => void;
+  1318→  isPackage: boolean; setIsPackage: (v: boolean) => void;
+  1319→  packagePrice: number; setPackagePrice: (v: number) => void;
+  1320→  packageItemDrafts: Array<{ productId: string; name: string; qty: number }>;
+  1321→  setPackageItemDrafts: (v: Array<{ productId: string; name: string; qty: number }>) => void;
+  1322→  allProducts: ProductInfo[];
+  1323→  selfId?: string;
+  1324→}) {
+  1325→  // 子商品可选范围：非套餐、非自己
+  1326→  const availableSubs = useMemo(
+  1327→    () => allProducts.filter((p) => !p.isPackage && p.id !== selfId),
+  1328→    [allProducts, selfId],
+  1329→  );
+  1330→
+  1331→  const toggleSub = (p: ProductInfo) => {
+  1332→    const exists = packageItemDrafts.find((d) => d.productId === p.id);
+  1333→    if (exists) {
+  1334→      setPackageItemDrafts(packageItemDrafts.filter((d) => d.productId !== p.id));
+  1335→    } else {
+  1336→      setPackageItemDrafts([...packageItemDrafts, { productId: p.id, name: p.name, qty: 1 }]);
+  1337→    }
+  1338→  };
+  1339→
+  1340→  const setSubQty = (productId: string, qty: number) => {
+  1341→    setPackageItemDrafts(packageItemDrafts.map((d) => (d.productId === productId ? { ...d, qty: Math.max(1, qty) } : d)));
+  1342→  };
+  1343→
+  1344→  return (
+  1345→    <div className="py-2 space-y-3">
+  1346→      <div>
+  1347→        <Label className="text-xs text-slate-400">物品名称</Label>
+  1348→        <Input
+  1349→          value={name}
+  1350→          onChange={(e) => setName(e.target.value)}
+  1351→          className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1352→        />
+  1353→      </div>
+  1354→      <div className="grid grid-cols-3 gap-3">
+  1355→        <div>
+  1356→          <Label className="text-xs text-slate-400">单价 ¥</Label>
+  1357→          <Input
+  1358→            type="number"
+  1359→            value={price}
+  1360→            onChange={(e) => setPrice(Number(e.target.value))}
+  1361→            className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1362→          />
+  1363→        </div>
+  1364→        <div>
+  1365→          <Label className="text-xs text-slate-400">库存</Label>
+  1366→          <Input
+  1367→            type="number"
+  1368→            value={stock}
+  1369→            onChange={(e) => setStock(Number(e.target.value))}
+  1370→            className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1371→          />
+  1372→        </div>
+  1373→        <div>
+  1374→          <Label className="text-xs text-slate-400">状态</Label>
+  1375→          <Select value={String(status)} onValueChange={(v) => setStatus(Number(v))}>
+  1376→            <SelectTrigger className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1">
+  1377→              <SelectValue />
+  1378→            </SelectTrigger>
+  1379→            <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+  1380→              <SelectItem value="1">在售</SelectItem>
+  1381→              <SelectItem value="0">停售</SelectItem>
+  1382→              <SelectItem value="2">估清</SelectItem>
+  1383→            </SelectContent>
+  1384→          </Select>
+  1385→        </div>
+  1386→      </div>
+  1387→
+  1388→      <div>
+  1389→        <Label className="text-xs text-slate-400">出品部门</Label>
+  1390→        <div className="grid grid-cols-4 gap-2 mt-1">
+  1391→          {OUTPUT_DEPTS.map((d) => {
+  1392→            const Icon = d.icon;
+  1393→            const active = outputDept === d.value;
+  1394→            return (
+  1395→              <button
+  1396→                key={d.value}
+  1397→                onClick={() => setOutputDept(d.value)}
+  1398→                className={cn(
+  1399→                  "rounded-lg border-2 p-3 text-center transition-all",
+  1400→                  active ? "border-emerald-500 bg-emerald-500/15" : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
+  1401→                )}
+  1402→              >
+  1403→                <Icon className={cn("h-5 w-5 mx-auto", d.color)} />
+  1404→                <div className={cn("text-xs mt-1", active ? "text-emerald-300" : "text-slate-400")}>{d.label}</div>
+  1405→              </button>
+  1406→            );
+  1407→          })}
+  1408→        </div>
+  1409→      </div>
+  1410→
+  1411→      <Separator className="bg-slate-700/60" />
+  1412→
+  1413→      {/* 计入最低消费 */}
+  1414→      <div className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2.5">
+  1415→        <div className="min-w-0">
+  1416→          <div className="text-sm text-slate-200 flex items-center gap-1.5">
+  1417→            <Percent className="h-3.5 w-3.5 text-amber-400" />
+  1418→            计入最低消费
+  1419→          </div>
+  1420→          <div className="text-xs text-slate-500 mt-0.5">不勾选的物品，即使包厢有最低消费，点了也不算进低消</div>
+  1421→        </div>
+  1422→        <Switch checked={countToMinSpend} onCheckedChange={setCountToMinSpend} />
+  1423→      </div>
+  1424→
+  1425→      {/* 套餐 */}
+  1426→      <div className="rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2.5">
+  1427→        <div className="flex items-center justify-between">
+  1428→          <div className="min-w-0">
+  1429→            <div className="text-sm text-slate-200 flex items-center gap-1.5">
+  1430→              <Package className="h-3.5 w-3.5 text-emerald-400" />
+  1431→              是否套餐
+  1432→            </div>
+  1433→            <div className="text-xs text-slate-500 mt-0.5">勾选后设定套餐价，子商品单价在账单中隐藏（显示0），只有套餐价进账单</div>
+  1434→          </div>
+  1435→          <Switch checked={isPackage} onCheckedChange={setIsPackage} />
+  1436→        </div>
+  1437→
+  1438→        {isPackage && (
+  1439→          <div className="mt-3 space-y-3 border-t border-slate-700/50 pt-3">
+  1440→            <div>
+  1441→              <Label className="text-xs text-slate-400">套餐价 ¥</Label>
+  1442→              <Input
+  1443→                type="number"
+  1444→                value={packagePrice}
+  1445→                onChange={(e) => setPackagePrice(Number(e.target.value))}
+  1446→                className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1447→              />
+  1448→            </div>
+  1449→            <div>
+  1450→              <Label className="text-xs text-slate-400">套餐子项选择</Label>
+  1451→              <div className="mt-1 max-h-56 overflow-y-auto rounded-md border border-slate-700/50 bg-slate-900/40 p-2 space-y-1">
+  1452→                {availableSubs.length === 0 && (
+  1453→                  <div className="text-xs text-slate-500 text-center py-4">暂无可选子商品</div>
+  1454→                )}
+  1455→                {availableSubs.map((p) => {
+  1456→                  const checked = packageItemDrafts.some((d) => d.productId === p.id);
+  1457→                  const draft = packageItemDrafts.find((d) => d.productId === p.id);
+  1458→                  return (
+  1459→                    <label
+  1460→                      key={p.id}
+  1461→                      className={cn(
+  1462→                        "flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer transition-colors",
+  1463→                        checked ? "bg-emerald-500/10" : "hover:bg-slate-800/60",
+  1464→                      )}
+  1465→                    >
+  1466→                      <input
+  1467→                        type="checkbox"
+  1468→                        checked={checked}
+  1469→                        onChange={() => toggleSub(p)}
+  1470→                        className="h-3.5 w-3.5 accent-emerald-500"
+  1471→                      />
+  1472→                      <span className={cn("text-sm flex-1 truncate", checked ? "text-emerald-200" : "text-slate-300")}>
+  1473→                        {p.name}
+  1474→                      </span>
+  1475→                      <span className="text-xs text-slate-500">¥{p.price.toFixed(2)}</span>
+  1476→                      {checked && draft && (
+  1477→                        <Input
+  1478→                          type="number"
+  1479→                          min={1}
+  1480→                          value={draft.qty}
+  1481→                          onChange={(e) => setSubQty(p.id, Number(e.target.value))}
+  1482→                          className="h-7 w-14 bg-slate-900/60 border-slate-700 text-slate-100 text-center"
+  1483→                          onClick={(e) => e.stopPropagation()}
+  1484→                        />
+  1485→                      )}
+  1486→                    </label>
+  1487→                  );
+  1488→                })}
+  1489→              </div>
+  1490→              {packageItemDrafts.length > 0 && (
+  1491→                <div className="mt-2 text-xs text-slate-400">
+  1492→                  已选 {packageItemDrafts.length} 项 · 子商品单价在账单中显示为 ¥0
+  1493→                </div>
+  1494→              )}
+  1495→            </div>
+  1496→          </div>
+  1497→        )}
+  1498→      </div>
+  1499→    </div>
+  1500→  );
+  1501→}
+  1502→
+  1503→function AddProductDialog({ category, allProducts, categories, onClose, onSaved }: {
+  1504→  category: ProductCategoryInfo | null;
+  1505→  allProducts: ProductInfo[];
+  1506→  categories: ProductCategoryInfo[];
+  1507→  onClose: () => void;
+  1508→  onSaved: () => void;
+  1509→}) {
+  1510→  const [name, setName] = useState("");
+  1511→  const [price, setPrice] = useState(0);
+  1512→  const [stock, setStock] = useState(0);
+  1513→  const [status, setStatus] = useState(1);
+  1514→  const [outputDept, setOutputDept] = useState("bar");
+  1515→  const [countToMinSpend, setCountToMinSpend] = useState(true);
+  1516→  const [isPackage, setIsPackage] = useState(false);
+  1517→  const [packagePrice, setPackagePrice] = useState(0);
+  1518→  const [packageItemDrafts, setPackageItemDrafts] = useState<Array<{ productId: string; name: string; qty: number }>>([]);
+  1519→  const [saving, setSaving] = useState(false);
+  1520→  const { toast } = useToast();
+  1521→
+  1522→  useEffect(() => {
+  1523→    if (category) {
+  1524→      setName("");
+  1525→      setPrice(0);
+  1526→      setStock(0);
+  1527→      setStatus(1);
+  1528→      setOutputDept("bar");
+  1529→      setCountToMinSpend(true);
+  1530→      setIsPackage(false);
+  1531→      setPackagePrice(0);
+  1532→      setPackageItemDrafts([]);
+  1533→    }
+  1534→  }, [category]);
+  1535→
+  1536→  const save = async () => {
+  1537→    if (!category || !name.trim()) return;
+  1538→    setSaving(true);
+  1539→    try {
+  1540→      await api.createProduct({
+  1541→        name: name.trim(),
+  1542→        categoryId: category.id,
+  1543→        price: Number(price),
+  1544→        stock: Number(stock),
+  1545→        status: Number(status),
+  1546→        outputDept,
+  1547→        countToMinSpend,
+  1548→        isPackage,
+  1549→        packagePrice: Number(packagePrice),
+  1550→        packageItems: isPackage ? JSON.stringify(packageItemDrafts) : null,
+  1551→      });
+  1552→      toast({ title: "物品已添加", description: `${category.name} / ${name.trim()}` });
+  1553→      onSaved();
+  1554→    } catch (e) {
+  1555→      toast({ title: "创建失败", description: String(e), variant: "destructive" });
+  1556→    } finally {
+  1557→      setSaving(false);
+  1558→    }
+  1559→  };
+  1560→
+  1561→  return (
+  1562→    <Dialog open={!!category} onOpenChange={(v) => !v && onClose()}>
+  1563→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg max-h-[90vh] overflow-y-auto">
+  1564→        <DialogHeader>
+  1565→          <DialogTitle className="text-slate-100">添加物品 · {category?.name}</DialogTitle>
+  1566→          <DialogDescription className="text-slate-400">
+  1567→            填写物品基础信息、出品部门、最低消费与套餐设置
+  1568→          </DialogDescription>
+  1569→        </DialogHeader>
+  1570→        <ProductFormFields
+  1571→          name={name} setName={setName}
+  1572→          price={price} setPrice={setPrice}
+  1573→          stock={stock} setStock={setStock}
+  1574→          status={status} setStatus={setStatus}
+  1575→          outputDept={outputDept} setOutputDept={setOutputDept}
+  1576→          countToMinSpend={countToMinSpend} setCountToMinSpend={setCountToMinSpend}
+  1577→          isPackage={isPackage} setIsPackage={setIsPackage}
+  1578→          packagePrice={packagePrice} setPackagePrice={setPackagePrice}
+  1579→          packageItemDrafts={packageItemDrafts} setPackageItemDrafts={setPackageItemDrafts}
+  1580→          allProducts={allProducts}
+  1581→        />
+  1582→        <DialogFooter>
+  1583→          <Button variant="ghost" onClick={onClose} className="text-slate-300 hover:bg-slate-800">取消</Button>
+  1584→          <Button onClick={save} disabled={saving || !name.trim()} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1585→            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+  1586→            添加物品
+  1587→          </Button>
+  1588→        </DialogFooter>
+  1589→      </DialogContent>
+  1590→    </Dialog>
+  1591→  );
+  1592→}
+  1593→
+  1594→function EditProductDialog({ product, allProducts, categories, onClose, onSaved }: {
+  1595→  product: ProductInfo | null;
+  1596→  allProducts: ProductInfo[];
+  1597→  categories: ProductCategoryInfo[];
+  1598→  onClose: () => void;
+  1599→  onSaved: () => void;
+  1600→}) {
+  1601→  const [price, setPrice] = useState(0);
+  1602→  const [stock, setStock] = useState(0);
+  1603→  const [status, setStatus] = useState(1);
+  1604→  const [outputDept, setOutputDept] = useState("bar");
+  1605→  const [name, setName] = useState("");
+  1606→  const [countToMinSpend, setCountToMinSpend] = useState(true);
+  1607→  const [isPackage, setIsPackage] = useState(false);
+  1608→  const [packagePrice, setPackagePrice] = useState(0);
+  1609→  const [packageItemDrafts, setPackageItemDrafts] = useState<Array<{ productId: string; name: string; qty: number }>>([]);
+  1610→  const [saving, setSaving] = useState(false);
+  1611→  const { toast } = useToast();
+  1612→
+  1613→  useEffect(() => {
+  1614→    if (product) {
+  1615→      setPrice(product.price);
+  1616→      setStock(product.stock);
+  1617→      setStatus(product.status);
+  1618→      setOutputDept(product.outputDept);
+  1619→      setName(product.name);
+  1620→      setCountToMinSpend(product.countToMinSpend);
+  1621→      setIsPackage(product.isPackage);
+  1622→      setPackagePrice(product.packagePrice);
+  1623→      setPackageItemDrafts(parsePackageItems(product.packageItems));
+  1624→    }
+  1625→  }, [product]);
+  1626→
+  1627→  const save = async () => {
+  1628→    if (!product) return;
+  1629→    setSaving(true);
+  1630→    try {
+  1631→      await api.updateProduct({
+  1632→        id: product.id,
+  1633→        name,
+  1634→        price: Number(price),
+  1635→        stock: Number(stock),
+  1636→        status: Number(status),
+  1637→        outputDept,
+  1638→        countToMinSpend,
+  1639→        isPackage,
+  1640→        packagePrice: Number(packagePrice),
+  1641→        packageItems: isPackage ? JSON.stringify(packageItemDrafts) : null,
+  1642→      });
+  1643→      toast({ title: "物品已更新", description: product.name });
+  1644→      onSaved();
+  1645→    } catch (e) {
+  1646→      toast({ title: "更新失败", description: String(e), variant: "destructive" });
+  1647→    } finally {
+  1648→      setSaving(false);
+  1649→    }
+  1650→  };
+  1651→
+  1652→  return (
+  1653→    <Dialog open={!!product} onOpenChange={(v) => !v && onClose()}>
+  1654→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-lg max-h-[90vh] overflow-y-auto">
+  1655→        <DialogHeader>
+  1656→          <DialogTitle className="text-slate-100">编辑物品</DialogTitle>
+  1657→          <DialogDescription className="text-slate-400">
+  1658→            修改物品基础信息、价格、库存、出品部门与套餐设置
+  1659→          </DialogDescription>
+  1660→        </DialogHeader>
+  1661→        <ProductFormFields
+  1662→          name={name} setName={setName}
+  1663→          price={price} setPrice={setPrice}
+  1664→          stock={stock} setStock={setStock}
+  1665→          status={status} setStatus={setStatus}
+  1666→          outputDept={outputDept} setOutputDept={setOutputDept}
+  1667→          countToMinSpend={countToMinSpend} setCountToMinSpend={setCountToMinSpend}
+  1668→          isPackage={isPackage} setIsPackage={setIsPackage}
+  1669→          packagePrice={packagePrice} setPackagePrice={setPackagePrice}
+  1670→          packageItemDrafts={packageItemDrafts} setPackageItemDrafts={setPackageItemDrafts}
+  1671→          allProducts={allProducts}
+  1672→          selfId={product?.id}
+  1673→        />
+  1674→        {product && (
+  1675→          <div className="text-xs text-slate-500 border-t border-slate-700/40 pt-2">
+  1676→            当前大类：{product.categoryName}
+  1677→          </div>
+  1678→        )}
+  1679→        <DialogFooter>
+  1680→          <Button variant="ghost" onClick={onClose} className="text-slate-300 hover:bg-slate-800">取消</Button>
+  1681→          <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1682→            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+  1683→            保存
+  1684→          </Button>
+  1685→        </DialogFooter>
+  1686→      </DialogContent>
+  1687→    </Dialog>
+  1688→  );
+  1689→}
+  1690→
+  1691→// ============ Tab3: 口味设置 ============
+  1692→
+  1693→function FlavorsTab() {
+  1694→  const [flavors, setFlavors] = useState<FlavorCategoryInfo[]>([]);
+  1695→  const [loading, setLoading] = useState(true);
+  1696→  const [adding, setAdding] = useState(false);
+  1697→  const { toast } = useToast();
+  1698→
+  1699→  const load = useCallback(async () => {
+  1700→    setLoading(true);
+  1701→    try {
+  1702→      setFlavors(await api.getFlavorCategories());
+  1703→    } catch (e) {
+  1704→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+  1705→    } finally {
+  1706→      setLoading(false);
+  1707→    }
+  1708→  }, [toast]);
+  1709→
+  1710→  useEffect(() => {
+  1711→    load();
+  1712→  }, [load]);
+  1713→
+  1714→  return (
+  1715→    <div className="pb-6 space-y-4">
+  1716→      <div className="flex items-center justify-between">
+  1717→        <div className="text-sm text-slate-400">
+  1718→          共 {flavors.length} 个口味分类，{flavors.reduce((s, f) => s + f.flavors.length, 0)} 个口味选项
+  1719→        </div>
+  1720→        <div className="flex gap-2">
+  1721→          <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
+  1722→            <RefreshCw className="h-3.5 w-3.5" /> 刷新
+  1723→          </Button>
+  1724→          <Button onClick={() => setAdding(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1725→            <Plus className="h-4 w-4" /> 新建口味分类
+  1726→          </Button>
+  1727→        </div>
+  1728→      </div>
+  1729→
+  1730→      {loading ? (
+  1731→        <LoadingGrid count={3} className="grid-cols-1 md:grid-cols-2 lg:grid-cols-3" />
+  1732→      ) : flavors.length === 0 ? (
+  1733→        <EmptyHint>暂无口味分类</EmptyHint>
+  1734→      ) : (
+  1735→        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+  1736→          {flavors.map((f) => (
+  1737→            <DarkCard key={f.id} className="overflow-hidden">
+  1738→              <CardHeader className="pb-2">
+  1739→                <div className="flex items-start justify-between gap-2">
+  1740→                  <div className="flex items-center gap-2">
+  1741→                    <div className="rounded-md bg-fuchsia-500/15 p-1.5">
+  1742→                      <Sparkles className="h-3.5 w-3.5 text-fuchsia-400" />
+  1743→                    </div>
+  1744→                    <div>
+  1745→                      <CardTitle className="text-base text-slate-100">{f.name}</CardTitle>
+  1746→                      <CardDescription className="text-xs text-slate-400">
+  1747→                        {f.required ? "必选" : "可选"} · {f.flavors.length} 个选项
+  1748→                      </CardDescription>
+  1749→                    </div>
+  1750→                  </div>
+  1751→                  {f.required ? (
+  1752→                    <Badge className="bg-rose-500/20 text-rose-300 border-rose-500/30">必选</Badge>
+  1753→                  ) : (
+  1754→                    <Badge className="bg-slate-700/50 text-slate-300 border-slate-600/50">可选</Badge>
+  1755→                  )}
+  1756→                </div>
+  1757→              </CardHeader>
+  1758→              <CardContent>
+  1759→                <div className="flex flex-wrap gap-1.5">
+  1760→                  {f.flavors.map((fl) => (
+  1761→                    <span
+  1762→                      key={fl.id}
+  1763→                      className="inline-flex items-center rounded-md bg-slate-700/40 border border-slate-600/40 px-2.5 py-1 text-xs text-slate-200"
+  1764→                    >
+  1765→                      {fl.name}
+  1766→                      {fl.priceDelta > 0 && (
+  1767→                        <span className="ml-1 text-emerald-400">+¥{fl.priceDelta}</span>
+  1768→                      )}
+  1769→                    </span>
+  1770→                  ))}
+  1771→                  {f.flavors.length === 0 && (
+  1772→                    <span className="text-xs text-slate-500">暂无选项</span>
+  1773→                  )}
+  1774→                </div>
+  1775→              </CardContent>
+  1776→            </DarkCard>
+  1777→          ))}
+  1778→        </div>
+  1779→      )}
+  1780→
+  1781→      <CreateFlavorDialog
+  1782→        open={adding}
+  1783→        onClose={() => setAdding(false)}
+  1784→        onSaved={() => {
+  1785→          setAdding(false);
+  1786→          load();
+  1787→        }}
+  1788→      />
+  1789→    </div>
+  1790→  );
+  1791→}
+  1792→
+  1793→function CreateFlavorDialog({ open, onClose, onSaved }: {
+  1794→  open: boolean;
+  1795→  onClose: () => void;
+  1796→  onSaved: () => void;
+  1797→}) {
+  1798→  const [name, setName] = useState("");
+  1799→  const [required, setRequired] = useState(false);
+  1800→  const [flavorsText, setFlavorsText] = useState("");
+  1801→  const [saving, setSaving] = useState(false);
+  1802→  const { toast } = useToast();
+  1803→
+  1804→  useEffect(() => {
+  1805→    if (open) {
+  1806→      setName("");
+  1807→      setRequired(false);
+  1808→      setFlavorsText("");
+  1809→    }
+  1810→  }, [open]);
+  1811→
+  1812→  const save = async () => {
+  1813→    if (!name.trim()) return;
+  1814→    const flavors = flavorsText
+  1815→      .split(/[,，\s]+/)
+  1816→      .map((s) => s.trim())
+  1817→      .filter(Boolean);
+  1818→    if (flavors.length === 0) {
+  1819→      toast({ title: "请至少添加一个口味选项", variant: "destructive" });
+  1820→      return;
+  1821→    }
+  1822→    setSaving(true);
+  1823→    try {
+  1824→      await api.createFlavorCategory(name.trim(), required, flavors);
+  1825→      toast({ title: "口味分类已创建", description: `${name} · ${flavors.length} 个选项` });
+  1826→      onSaved();
+  1827→    } catch (e) {
+  1828→      toast({ title: "创建失败", description: String(e), variant: "destructive" });
+  1829→    } finally {
+  1830→      setSaving(false);
+  1831→    }
+  1832→  };
+  1833→
+  1834→  return (
+  1835→    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+  1836→      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md">
+  1837→        <DialogHeader>
+  1838→          <DialogTitle className="text-slate-100">新建口味分类</DialogTitle>
+  1839→          <DialogDescription className="text-slate-400">
+  1840→            口味是动态的，分类名与选项名都由管理员自定义
+  1841→          </DialogDescription>
+  1842→        </DialogHeader>
+  1843→        <div className="py-2 space-y-3">
+  1844→          <div>
+  1845→            <Label className="text-xs text-slate-400">分类名称</Label>
+  1846→            <Input
+  1847→              value={name}
+  1848→              onChange={(e) => setName(e.target.value)}
+  1849→              placeholder="例如：酒水温度 / 辣度 / 甜度"
+  1850→              className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1851→            />
+  1852→          </div>
+  1853→          <div className="flex items-center justify-between rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2">
+  1854→            <div>
+  1855→              <div className="text-sm text-slate-200">必选口味</div>
+  1856→              <div className="text-xs text-slate-500">启用后点单时强制弹出选择</div>
+  1857→            </div>
+  1858→            <Switch checked={required} onCheckedChange={setRequired} />
+  1859→          </div>
+  1860→          <div>
+  1861→            <Label className="text-xs text-slate-400">口味选项（逗号或空格分隔）</Label>
+  1862→            <Textarea
+  1863→              value={flavorsText}
+  1864→              onChange={(e) => setFlavorsText(e.target.value)}
+  1865→              placeholder="常温, 冰镇&#10;或不辣, 微辣, 中辣, 特辣"
+  1866→              rows={3}
+  1867→              className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+  1868→            />
+  1869→          </div>
+  1870→        </div>
+  1871→        <DialogFooter>
+  1872→          <Button variant="ghost" onClick={onClose} className="text-slate-300 hover:bg-slate-800">取消</Button>
+  1873→          <Button onClick={save} disabled={saving || !name.trim()} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1874→            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+  1875→            创建
+  1876→          </Button>
+  1877→        </DialogFooter>
+  1878→      </DialogContent>
+  1879→    </Dialog>
+  1880→  );
+  1881→}
+  1882→
+  1883→// ============ Tab4: 赠送规则 ============
+  1884→
+  1885→function GiftRulesTab() {
+  1886→  const [rules, setRules] = useState<GiftRuleInfo[]>([]);
+  1887→  const [loading, setLoading] = useState(true);
+  1888→  const [adding, setAdding] = useState(false);
+  1889→  const { toast } = useToast();
+  1890→
+  1891→  const load = useCallback(async () => {
+  1892→    setLoading(true);
+  1893→    try {
+  1894→      setRules(await api.getGiftRules());
+  1895→    } catch (e) {
+  1896→      toast({ title: "加载失败", description: String(e), variant: "destructive" });
+  1897→    } finally {
+  1898→      setLoading(false);
+  1899→    }
+  1900→  }, [toast]);
+  1901→
+  1902→  useEffect(() => {
+  1903→    load();
+  1904→  }, [load]);
+  1905→
+  1906→  const handleToggle = async (r: GiftRuleInfo, enabled: boolean) => {
+  1907→    try {
+  1908→      await api.updateGiftRule(r.id, { enabled });
+  1909→      toast({
+  1910→        title: enabled ? "规则已启用" : "规则已停用",
+  1911→        description: r.name,
+  1912→      });
+  1913→      load();
+  1914→    } catch (e) {
+  1915→      toast({ title: "操作失败", description: String(e), variant: "destructive" });
+  1916→    }
+  1917→  };
+  1918→
+  1919→  const parseDeliveries = (raw: string | null): Array<{ name: string; qty: number }> => {
+  1920→    if (!raw) return [];
+  1921→    try {
+  1922→      const arr = JSON.parse(raw);
+  1923→      if (Array.isArray(arr)) return arr as Array<{ name: string; qty: number }>;
+  1924→    } catch {
+  1925→      /* ignore */
+  1926→    }
+  1927→    return [];
+  1928→  };
+  1929→
+  1930→  return (
+  1931→    <div className="pb-6 space-y-4">
+  1932→      <div className="flex items-center justify-between">
+  1933→        <div className="text-sm text-slate-400">
+  1934→          共 {rules.length} 条规则，{rules.filter((r) => r.enabled).length} 条启用中
+  1935→        </div>
+  1936→        <div className="flex gap-2">
+  1937→          <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
+  1938→            <RefreshCw className="h-3.5 w-3.5" /> 刷新
+  1939→          </Button>
+  1940→          <Button onClick={() => setAdding(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
+  1941→            <Plus className="h-4 w-4" /> 新建规则
+  1942→          </Button>
+  1943→        </div>
+  1944→      </div>
+  1945→
+  1946→      {loading ? (
+  1947→        <LoadingGrid count={3} />
+  1948→      ) : rules.length === 0 ? (
+  1949→        <EmptyHint>暂无赠送规则</EmptyHint>
+  1950→      ) : (
+  1951→        <div className="grid gap-3 md:grid-cols-2">
+  1952→          {rules.map((r) => {
+  1953→            const deliveries = parseDeliveries(r.deliveries);
+  1954→            return (
+  1955→              <DarkCard key={r.id} className={cn(!r.enabled && "opacity-60")}>
+  1956→                <CardHeader className="pb-3">
+  1957→                  <div className="flex items-start justify-between gap-2">
+  1958→                    <div className="flex items-center gap-2 min-w-0">
+  1959→                      <div className="rounded-md bg-rose-500/15 p-1.5 shrink-0">
+  1960→                        <Gift className="h-3.5 w-3.5 text-rose-400" />
+  1961→                      </div>
+  1962→                      <div className="min-w-0">
+  1963→                        <CardTitle className="text-base text-slate-100 truncate">{r.name}</CardTitle>
+  1964→                        <CardDescription className="text-xs text-slate-400">
+  1965→                          {r.cumulative ? "累计叠加" : "单次触发"} ·{" "}
+  1966→                          {r.timeLimit ? `时段 ${r.startTime}-${r.endTime}` : "全时段"} ·{" "}
+  1967→                          {r.roomLimit ? `限 ${r.roomTypes}` : "全部房台"}
+  1968→                        </CardDescription>
+  1969→                      </div>
+  1970→                    </div>
+  1971→                    <Switch
+  1972→                      checked={r.enabled}
+  1973→                      onCheckedChange={(c) => handleToggle(r, c)}
+  1974→                    />
+  1975→                  </div>
+  1976→                </CardHeader>
+  1977→                <CardContent>
+  1978→                  <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-3">
+  1979→                    <div className="flex items-center gap-2 flex-wrap text-sm">
+  1980→                      <span className="text-slate-400">买</span>
+  1981→                      <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/30">
+  1982→                        {r.condProductName}
+  1983→                      </Badge>
+  1984→                      <span className="text-slate-300 font-mono">×{r.condQty}</span>
+  1985→                      <span className="text-emerald-400 mx-1">→</span>
+  1986→                      {r.giftQty > 0 ? (
+  1987→                        <>
+  1988→                          <span className="text-slate-400">送</span>
+  1989→                          <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+  1990→                            {r.giftProductName}
+  1991→                          </Badge>
+  1992→                          <span className="text-slate-300 font-mono">×{r.giftQty}</span>
+  1993→                        </>
+  1994→                      ) : (
+  1995→                        <span className="text-slate-500 text-xs">（仅配送，不赠送主商品）</span>
+  1996→                      )}
+  1997→                    </div>
+  1998→                    {deliveries.length > 0 && (
+  1999→                      <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+  2000→                        <span className="text-slate-400">+ 配送：</span>
+
+[showing lines 1-2000 of 4746; use offset=2001 with limit to continue reading]

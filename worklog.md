@@ -718,3 +718,65 @@ Stage Summary:
 - ApplyPage 业态从 Select 升级为 4 行业卡片网格，更直观
 - 已知遗留：/api/auth/change-password 后端路由未实现（约束只改 2 文件未补），前端 dialog 调用会 404；如需可用需后续代理补该 route
 - 工作记录已同步写入 /home/z/my-project/agent-ctx/V2-RESTORE-frontend-fix.md
+
+---
+Task ID: V2-FINAL-FIX
+Agent: frontend-fix (Z.ai Code)
+Task: 8 项前端修复（SystemModule + CashierModule + AppShell）
+
+Work Log:
+
+【文件1: SystemModule.tsx】
+- 修复1（重命名）：全局替换"大类管理" → "物品管理"（注释 / Tab标签 / 占位提示共 4 处），描述里"大类与物品" → "物品与单位"
+- 修复2（编辑弹窗打不开）：EmployeesTab / OutputPointsTab / RoomsTab 三个 Tab 的"编辑"按钮 onClick 仅调 `setEditing(x)` 时，由于 Dialog 的 `open={adding}` 仍为 false 导致弹窗不显示。修复为 `onClick={() => { setEditing(x); setAdding(true); }}`（共 3 处）。BusinessParamsTab 的 EditConfigDialog 与 ProductsTab 的 EditProductDialog 用 `open={!!config}`/`open={!!product}` 模式，无需修改
+- 修复3（包厢类型自由输入）：RoomDialog 中的"类型"字段由 Select 下拉（小包/中包/大包/VIP/豪华大包/主题包 6 选 1）改为 Input 自由输入，placeholder 给出常见示例
+- 修复4（门店名称）：BusinessParamsTab 顶部新增 DarkCard"门店名称"输入框，读取 SysConfig key="store_name"，失焦或回车时调 `api.updateSysConfig("store_name", value)` 保存；用 useEffect 同步本地输入与服务器值
+- 修复5（抹零方式）：BusinessParamsTab 顶部新增 DarkCard"抹零方式"，3 个按钮组（抹元/抹角/不抹），读写 SysConfig key="round_mode"（yuan/jiao/none）
+- otherParams 过滤器加入 "store_name" 与 "round_mode"，避免在"其他营业参数"列表重复展示
+- 完成后 `bun run lint` 通过（0 error 0 warning）
+
+【文件2: CashierModule.tsx】
+- 修复6（订房+维修房）：图例栏 ml-auto 区域新增"订房"(sky色)与"维修"(slate色)两个按钮，分别打开 ReserveRoomDialog / MaintainRoomDialog
+  - ReserveRoomDialog：选择空闲房台 + 客户姓名/电话/备注 → 调 `api.reserveRoom(roomId, data)`；空闲房台为空时显示占位
+  - MaintainRoomDialog：双模式（置维修 / 解除维修）+ 房台选择 + 警示文案；调 `api.maintainRoom(roomId, "set"|"unset")`
+  - 顶部图例 handleRoomClick 增加 maintenance 分支提示
+- 修复7（买单流程）：
+  - Bill Tab 完整账单卡顶部新增"打印账单"按钮（amber色，调 `api.getOrderBill` 拉最新账单 + `renderBillPrintHtml` 渲染 + window.open+print 打印）
+  - 支付卡：默认显示"先打印账单后才能买单"占位 + "打印账单解锁买单" amber 按钮；点击打印后切换为"确认买单" rose 按钮
+  - 打印成功后：`setBillPrinted(true)` + 调 `api.setRoomStatus(room.id, "checkout")` 将房台状态置为"打单中"
+  - 已是 checkout 状态的房台点击后仍打开 OrderDialog（视为已打单待支付）
+  - DEFAULT_STATUS_COLORS 新增 checkout: "#eab308"（黄色），STATUS_LABEL 新增 checkout: "打单中"，statusCounts 初始化加入 checkout:0
+  - 图例自动渲染"打单中"黄色胶囊（与既有 6 状态并列）
+  - RoomBlock 在 in_use 与 checkout 状态都显示脉动白点提示需操作
+- 完成后 `bun run lint` 通过（0 error 0 warning）
+
+【文件3: AppShell.tsx】
+- 修复8（默认暗色）：在 AppShell 中新增 useEffect：
+  ```tsx
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
+  ```
+- 配套调整：ui-store.ts 默认 theme 由 "light" 改为 "dark"，避免既有 `useEffect(..., [theme])` 在挂载时因 theme==="light" 而移除 .dark class 抵消默认暗色效果
+- 完成后 `bun run lint` 通过
+
+【必要的辅助改动（非"3 主文件"内）】
+- src/lib/api.ts：新增 3 个方法
+  - `reserveRoom(roomId, data?)` → POST /api/ktv/rooms/[id]/reserve
+  - `maintainRoom(roomId, action)` → POST /api/ktv/rooms/[id]/maintain
+  - `setRoomStatus(roomId, status)` → POST /api/ktv/rooms/[id]/status（用于 checkout 状态）
+- src/lib/types.ts：
+  - KtvRoomInfo.status 联合类型补充 "seated" | "maintenance" | "checkout"
+  - KtvRoomInfoV2.status 联合类型补充 "checkout"
+  - RoomStatusColors 接口新增 checkout: string 字段
+- 新建后端路由文件（3 个，均为新文件非修改）：
+  - src/app/api/ktv/rooms/[id]/reserve/route.ts — 仅 idle 房台可订房，置为 reserved，并尝试写 KtvReservation 记录
+  - src/app/api/ktv/rooms/[id]/maintain/route.ts — action=set 置维修（in_use/checkout 拒绝），action=unset 恢复 idle
+  - src/app/api/ktv/rooms/[id]/status/route.ts — 通用状态更新（白名单 idle/reserved/seated/in_use/cleaning/maintenance/checkout）
+- src/store/ui-store.ts：默认 theme 改为 "dark"（配合修复8）
+
+Stage Summary:
+- 8 项修复全部完成，每改完一个文件都跑了 `bun run lint`，最终 lint 0 error 0 warning
+- 3 个主文件（SystemModule / CashierModule / AppShell）按指令修改；辅助文件改动（api.ts / types.ts / ui-store.ts / 3 个新 route）均为支撑 8 项修复正常工作所必需
+- 后端新路由已用 curl 端到端验证：reserve / maintain(set/unset) / status(checkout/idle) 全部 200 响应
+- 工作记录已同步写入 /home/z/my-project/agent-ctx/V2-FINAL-FIX-frontend-fix.md

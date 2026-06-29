@@ -224,7 +224,7 @@ export interface KtvRoomInfo {
   capacity: number;
   hourlyRate: number;
   minSpend: number;
-  status: "idle" | "in_use" | "cleaning" | "reserved";
+  status: "idle" | "in_use" | "cleaning" | "reserved" | "seated" | "maintenance" | "checkout";
   openedAt: string | null;
   currentOrderId: string | null;
   // 进行中订单的实时信息
@@ -442,7 +442,7 @@ export interface ThemeTemplateInfo {
 
 // 扩展 KtvRoomInfo
 export interface KtvRoomInfoV2 extends Omit<KtvRoomInfo, "status"> {
-  status: "idle" | "reserved" | "seated" | "in_use" | "cleaning" | "maintenance";
+  status: "idle" | "reserved" | "seated" | "in_use" | "cleaning" | "maintenance" | "checkout";
   area: string | null;
   bookingManagerName?: string | null;
 }
@@ -472,6 +472,7 @@ export interface RoomStatusColors {
   in_use: string;
   cleaning: string;
   maintenance: string;
+  checkout: string;
 }
 
 // 房态显示字段配置

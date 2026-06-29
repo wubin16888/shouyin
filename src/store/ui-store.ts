@@ -17,7 +17,8 @@ interface UIStore {
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
-  theme: "light",
+  // 默认暗色主题：与 AppShell 中 useEffect(document.documentElement.classList.add("dark")) 配合
+  theme: "dark",
   currentStoreId: 1001,
   sidebarOpen: false,
   toggleTheme: () =>

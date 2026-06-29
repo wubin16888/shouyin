@@ -1,5 +1,5 @@
 // 模块：系统维护 — KTV 后台配置中心
-// 8 个子页签：营业参数 / 大类管理 / 口味设置 / 赠送规则 / 人事 / 出品点设置 / 包厢设置 / 主题市场
+// 8 个子页签：营业参数 / 物品管理 / 口味设置 / 赠送规则 / 人事 / 出品点设置 / 包厢设置 / 主题市场
 
 "use client";
 
@@ -253,7 +253,7 @@ export function SystemModule() {
               </Badge>
             </div>
             <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
-              统一管理营业参数、大类与物品、口味、赠送规则、人事权限、出品点、包厢与主题模板。所有配置变更将实时影响前台各业务模块。
+              统一管理营业参数、物品与单位、口味、赠送规则、人事权限、出品点、包厢与主题模板。所有配置变更将实时影响前台各业务模块。
             </p>
           </div>
         </div>
@@ -268,7 +268,7 @@ export function SystemModule() {
                 <Store className="h-4 w-4" /> 营业参数
               </TabsTrigger>
               <TabsTrigger value="products" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
-                <UtensilsCrossed className="h-4 w-4" /> 大类管理
+                <UtensilsCrossed className="h-4 w-4" /> 物品管理
               </TabsTrigger>
               <TabsTrigger value="flavors" className="data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-300 text-slate-300 gap-1.5 px-3 py-1.5">
                 <Sparkles className="h-4 w-4" /> 口味设置
@@ -389,6 +389,8 @@ function BusinessParamsTab() {
   const [configs, setConfigs] = useState<SysConfigInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<SysConfigInfo | null>(null);
+  const [storeName, setStoreName] = useState("");
+  const [roundMode, setRoundMode] = useState("yuan");
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -413,6 +415,13 @@ function BusinessParamsTab() {
   }, [configs]);
 
   const currency = cfgMap.get("currency_symbol")?.configValue ?? "¥";
+
+  // 门店名称 / 抹零方式 — 同步本地输入框
+  useEffect(() => {
+    setStoreName(cfgMap.get("store_name")?.configValue ?? "");
+    setRoundMode(cfgMap.get("round_mode")?.configValue ?? "yuan");
+  }, [cfgMap]);
+
   const businessHours = useMemo(() => {
     const raw = cfgMap.get("business_hours")?.configValue;
     if (!raw) return { open: "18:00", close: "02:00" };
@@ -445,7 +454,7 @@ function BusinessParamsTab() {
   };
 
   const otherParams = configs.filter(
-    (c) => !["currency_symbol", "business_hours", "auto_deliver"].includes(c.configKey),
+    (c) => !["currency_symbol", "business_hours", "auto_deliver", "store_name", "round_mode"].includes(c.configKey),
   );
 
   const autoDeliverCfg = cfgMap.get("auto_deliver");
@@ -466,8 +475,115 @@ function BusinessParamsTab() {
     }
   };
 
+  // 门店名称 — 失焦保存到 SysConfig("store_name")
+  const saveStoreName = async () => {
+    const trimmed = storeName.trim();
+    const current = cfgMap.get("store_name")?.configValue ?? "";
+    if (trimmed === current) return;
+    try {
+      await api.updateSysConfig("store_name", trimmed);
+      toast({
+        title: "门店名称已保存",
+        description: trimmed ? `本门店将显示为「${trimmed}」` : "已清空门店名称",
+      });
+      load();
+    } catch (e) {
+      toast({ title: "保存失败", description: String(e), variant: "destructive" });
+    }
+  };
+
+  // 抹零方式 — yuan / jiao / none
+  const changeRoundMode = async (mode: string) => {
+    if (mode === roundMode) return;
+    setRoundMode(mode);
+    try {
+      await api.updateSysConfig("round_mode", mode);
+      const label = mode === "yuan" ? "抹元（精确到元）" : mode === "jiao" ? "抹角（精确到 0.1 元）" : "不抹零";
+      toast({ title: "抹零方式已切换", description: label });
+      load();
+    } catch (e) {
+      toast({ title: "切换失败", description: String(e), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-4 pb-6">
+      {/* 门店名称 + 抹零方式 — 顶部基础参数 */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DarkCard className="border-emerald-700/40">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md bg-emerald-500/15 p-1.5">
+                <Store className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base text-slate-100">门店名称</CardTitle>
+                <CardDescription className="text-slate-400 text-xs">
+                  登录后显示的门店名（同步 SysConfig: store_name）
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Input
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              onBlur={saveStoreName}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              placeholder="如：星耀 KTV 总店"
+              className="bg-slate-900/60 border-slate-700 text-slate-100 placeholder:text-slate-500"
+            />
+            <p className="text-[10px] text-slate-500 mt-1.5">
+              失焦或回车后自动保存
+            </p>
+          </CardContent>
+        </DarkCard>
+
+        <DarkCard>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md bg-amber-500/15 p-1.5">
+                <Percent className="h-4 w-4 text-amber-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base text-slate-100">抹零方式</CardTitle>
+                <CardDescription className="text-slate-400 text-xs">
+                  买单时金额舍入到元 / 角 / 不抹零
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: "yuan", label: "抹元", desc: "到 1 元" },
+                { value: "jiao", label: "抹角", desc: "到 0.1 元" },
+                { value: "none", label: "不抹", desc: "精确到分" },
+              ] as const).map((opt) => {
+                const active = roundMode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => changeRoundMode(opt.value)}
+                    className={cn(
+                      "rounded-lg border-2 p-3 text-center transition-all",
+                      active
+                        ? "border-amber-500 bg-amber-500/15 shadow-lg shadow-amber-500/20"
+                        : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
+                    )}
+                  >
+                    <div className={cn("text-base font-bold", active ? "text-amber-300" : "text-slate-200")}>
+                      {opt.label}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </DarkCard>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <DarkCard>
           <CardHeader className="pb-3">
@@ -797,7 +913,7 @@ function EditConfigDialog({ config, onClose, onSaved }: {
   );
 }
 
-// ============ Tab2: 大类管理（原菜品管理）============
+// ============ Tab2: 物品管理（原菜品管理）============
 
 function ProductsTab() {
   const [categories, setCategories] = useState<ProductCategoryInfo[]>([]);
@@ -2386,7 +2502,7 @@ function EmployeesTab() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setEditing(e)}
+                            onClick={() => { setEditing(e); setAdding(true); }}
                             className="h-7 w-7 p-0 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -2822,7 +2938,7 @@ function OutputPointsTab() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setEditing(p)}
+                        onClick={() => { setEditing(p); setAdding(true); }}
                         className="w-full text-slate-300 hover:bg-slate-700/50 gap-1"
                       >
                         <Pencil className="h-3.5 w-3.5" /> 编辑
@@ -3198,7 +3314,7 @@ function RoomsSettingsTab() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setEditing(r)}
+                            onClick={() => { setEditing(r); setAdding(true); }}
                             className="flex-1 text-slate-300 hover:bg-slate-700/50 gap-1"
                           >
                             <Pencil className="h-3.5 w-3.5" /> 编辑
@@ -3379,16 +3495,12 @@ function RoomDialog({ open, editing, packages, onClose, onSaved }: {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-xs text-slate-400">类型</Label>
-              <Select value={roomType} onValueChange={setRoomType}>
-                <SelectTrigger className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
-                  {["小包", "中包", "大包", "VIP", "豪华大包", "主题包"].map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                value={roomType}
+                onChange={(e) => setRoomType(e.target.value)}
+                placeholder="如：中包 / VIP / 主题包"
+                className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
+              />
             </div>
             <div>
               <Label className="text-xs text-slate-400">区域</Label>
@@ -3469,7 +3581,7 @@ function RoomDialog({ open, editing, packages, onClose, onSaved }: {
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
                   {packages.length === 0 ? (
-                    <SelectItem value="_none" disabled>暂无套餐商品，请先在「大类管理」创建套餐</SelectItem>
+                    <SelectItem value="_none" disabled>暂无套餐商品，请先在「物品管理」创建套餐</SelectItem>
                   ) : (
                     packages.map((p) => (
                       <SelectItem key={p.id} value={p.id}>

@@ -182,6 +182,24 @@ export const api = {
     }),
   cleanRoom: (roomId: string) =>
     request<{ id: string; status: string }>(`/api/ktv/rooms/${roomId}/clean`, { method: "POST" }),
+  // 订房：将空闲房台标记为预订（reserved）
+  reserveRoom: (roomId: string, data?: { customerName?: string; phone?: string; remark?: string }) =>
+    request<{ id: string; status: string }>(`/api/ktv/rooms/${roomId}/reserve`, {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    }),
+  // 维修房：set → 进入维修状态；unset → 恢复空闲
+  maintainRoom: (roomId: string, action: "set" | "unset" = "set") =>
+    request<{ id: string; status: string }>(`/api/ktv/rooms/${roomId}/maintain`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
+  // 通用：更新房台状态（用于"打单中" checkout 等自定义状态）
+  setRoomStatus: (roomId: string, status: string) =>
+    request<{ id: string; status: string }>(`/api/ktv/rooms/${roomId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
   getKtvProducts: (storeId = 1001) =>
     request<KtvProductInfo[]>(`/api/ktv/products?storeId=${storeId}`),
   getKtvOrders: (status?: string) =>
