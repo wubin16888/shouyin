@@ -43,6 +43,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUIStore } from "@/store/ui-store";
 import { useAuth as useAuthStore } from "@/store/auth-store";
 import { useIndustry } from "@/store/industry-store";
+// @ts-ignore
 
 export type ModuleKey =
   // 云端管理
