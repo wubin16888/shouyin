@@ -2287,14 +2287,27 @@ function TransferDialog({
 }) {
   const [toRoomId, setToRoomId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [transferRule, setTransferRule] = useState<string>("new");
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
       setToRoomId("");
       setSubmitting(false);
+      api.getSysConfigs("system").then((configs) => {
+        const cfg = configs.find((c) => c.configKey === "transfer_rule");
+        if (cfg?.configValue) {
+          try { setTransferRule(JSON.parse(cfg.configValue).mode ?? "new"); } catch {}
+        }
+      }).catch(() => {});
     }
   }, [open]);
+
+  const ruleText = transferRule === "old"
+    ? "按原房价计费（全程按原房费率）"
+    : transferRule === "both"
+    ? "两房价分别结算（原房费 + 新房费，请人工核算原房费）"
+    : "按新房价计费（原房按原价，之后按新房费率）";
 
   const idleRooms = useMemo(() => rooms.filter((r) => r.status === "idle"), [rooms]);
   const selectedRoom = idleRooms.find((r) => r.id === toRoomId);
@@ -2363,7 +2376,7 @@ function TransferDialog({
               </div>
               <div className="text-[11px] text-amber-300/80 mt-2 flex items-start gap-1">
                 <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                <span>转房后，订单的包厢费将按新包厢的 hourlyRate 重新计算（计费模式随新包厢）</span>
+                <span>当前转房规则：{ruleText}</span>
               </div>
             </div>
           )}

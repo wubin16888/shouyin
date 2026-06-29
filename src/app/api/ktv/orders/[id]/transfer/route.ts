@@ -24,15 +24,28 @@ export async function POST(
     const fromRoomId = order.roomId;
     const fromRoomNo = order.roomNo;
 
+    // 读取转房规则配置：new(按新房价) / old(按原房价) / both(两房价分别)
+    const cfg = await db.sysConfig.findUnique({
+      where: { storeId_configKey: { storeId: order.storeId, configKey: "transfer_rule" } },
+    });
+    let mode = "new";
+    if (cfg?.configValue) {
+      try { mode = JSON.parse(cfg.configValue).mode ?? "new"; } catch {}
+    }
+    // new/both: 按新房价；old: 保持原房费率
+    const updateData: Record<string, unknown> = {
+      roomId: toRoomId,
+      roomNo: toRoom.roomNo,
+      roomType: toRoom.roomType,
+    };
+    if (mode !== "old") {
+      updateData.hourlyRate = toRoom.hourlyRate;
+    }
+
     // 更新订单的包厢信息
     const updated = await db.ktvOrder.update({
       where: { id },
-      data: {
-        roomId: toRoomId,
-        roomNo: toRoom.roomNo,
-        roomType: toRoom.roomType,
-        hourlyRate: toRoom.hourlyRate,
-      },
+      data: updateData,
     });
 
     // 原包厢释放 -> 清扫中
