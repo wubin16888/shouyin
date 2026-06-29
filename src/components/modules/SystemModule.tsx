@@ -3863,42 +3863,41 @@ function AiThemeDesigner({ open, onClose, onApplied }: {
         const authStr = localStorage.getItem("ktv-auth");
         if (authStr) { const auth = JSON.parse(authStr); if (auth?.state?.user?.storeId) storeId = auth.state.user.storeId; }
       } catch {}
-      // 保存房态配色
-      await fetch("/api/sys/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
-        body: JSON.stringify({ configKey: "room_status_colors", configValue: JSON.stringify(result.colors) }),
-      });
-      // 保存页面背景色
-      if (result.bgColor) {
-        await fetch("/api/sys/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
-          body: JSON.stringify({ configKey: "page_bg_color", configValue: result.bgColor }),
-        });
-      }
-      // 保存卡片背景色
-      if (result.cardBg) {
-        await fetch("/api/sys/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
-          body: JSON.stringify({ configKey: "card_bg_color", configValue: result.cardBg }),
-        });
-      }
-      // 保存文字颜色
-      if (result.textColor) {
-        await fetch("/api/sys/config", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
-          body: JSON.stringify({ configKey: "text_color", configValue: result.textColor }),
-        });
+      // 批量保存所有视觉配置
+      const configs: Record<string, string> = {
+        room_status_colors: JSON.stringify(result.colors),
+        page_bg_color: result.bgColor || "",
+        card_bg_color: result.cardBg || "",
+        text_color: result.textColor || "",
+        theme_visual: JSON.stringify({
+          borderColor: result.borderColor,
+          borderRadius: result.borderRadius,
+          boxShadow: result.boxShadow,
+          glowEffect: result.glowEffect,
+          cardBgGradient: result.cardBgGradient,
+          headerBg: result.headerBg,
+          sidebarBg: result.sidebarBg,
+          accentColor: result.accentColor,
+          roomShadow: result.roomShadow,
+          roomBorder: result.roomBorder,
+          textMuted: result.textMuted,
+        }),
+      };
+      for (const [key, value] of Object.entries(configs)) {
+        if (value) {
+          await fetch("/api/sys/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", "X-Store-Id": String(storeId) },
+            body: JSON.stringify({ configKey: key, configValue: value }),
+          });
+        }
       }
       // 保存为模板
       await api.createTheme({
         type: "room_theme",
         name: result.name || "AI设计主题",
         description: `AI生成: ${prompt}`,
-        content: JSON.stringify({ bgColor: result.bgColor, cardBg: result.cardBg, colors: result.colors }),
+        content: JSON.stringify(result),
       });
       toast({ title: "AI 主题已应用", description: "配色已下发，刷新页面查看效果" });
       onApplied();

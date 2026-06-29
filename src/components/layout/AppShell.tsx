@@ -126,8 +126,16 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
-  // 读取 AI 主题配色（页面背景/卡片背景/文字色）
-  const [themeColors, setThemeColors] = useState<{ bg?: string; card?: string; text?: string }>({});
+  // 读取 AI 主题配色（页面背景/卡片背景/文字色/光感/边框/阴影）
+  const [themeColors, setThemeColors] = useState<{
+    bg?: string; card?: string; text?: string;
+    visual?: {
+      borderColor?: string; borderRadius?: number; boxShadow?: string;
+      glowEffect?: string; cardBgGradient?: string; headerBg?: string;
+      sidebarBg?: string; accentColor?: string; roomShadow?: string;
+      roomBorder?: string; textMuted?: string;
+    };
+  }>({});
   useEffect(() => {
     let cancelled = false;
     const loadTheme = async () => {
@@ -139,8 +147,10 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
           const bg = cfgs.find((c: any) => c.configKey === "page_bg_color")?.configValue;
           const card = cfgs.find((c: any) => c.configKey === "card_bg_color")?.configValue;
           const text = cfgs.find((c: any) => c.configKey === "text_color")?.configValue;
-           
-          setThemeColors({ bg, card, text });
+          const visualRaw = cfgs.find((c: any) => c.configKey === "theme_visual")?.configValue;
+          let visual: any = undefined;
+          if (visualRaw) { try { visual = JSON.parse(visualRaw); } catch {} }
+          setThemeColors({ bg, card, text, visual });
         }
       } catch { /* ignore */ }
     };
@@ -177,8 +187,14 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
         color: themeColors.text || undefined,
       }}
     >
-      {/* 顶栏 — 渐变 + 玻璃质感 */}
-      <header className="sticky top-0 z-40 border-b border-slate-700/50 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-900/70">
+      {/* 顶栏 — 渐变 + 玻璃质感 + AI 主题 */}
+      <header
+        className="sticky top-0 z-40 border-b backdrop-blur-xl"
+        style={{
+          background: themeColors.visual?.headerBg || "linear-gradient(to right, #0f172a, #1e293b, #0f172a)",
+          borderColor: themeColors.visual?.borderColor || "rgba(148,163,184,0.2)",
+        }}
+      >
         {/* 顶部高光线 */}
         <div className="h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
         <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
@@ -254,12 +270,16 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
       </header>
 
       <div className="flex flex-1">
-        {/* 侧边栏 — 220px + 玻璃质感 + 精致分组 */}
+        {/* 侧边栏 — 220px + 玻璃质感 + AI 主题 */}
         <aside
           className={cn(
-            "fixed md:sticky top-16 z-30 h-[calc(100vh-4rem)] w-[220px] shrink-0 border-r border-slate-700/50 bg-slate-900/95 backdrop-blur-xl transition-transform overflow-y-auto",
+            "fixed md:sticky top-16 z-30 h-[calc(100vh-4rem)] w-[220px] shrink-0 border-r backdrop-blur-xl transition-transform overflow-y-auto",
             sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           )}
+          style={{
+            backgroundColor: themeColors.visual?.sidebarBg || undefined,
+            borderColor: themeColors.visual?.borderColor || "rgba(148,163,184,0.2)",
+          }}
         >
           <nav className="flex h-full flex-col gap-5 p-4">
             {NAV_GROUPS.map((group) => {
