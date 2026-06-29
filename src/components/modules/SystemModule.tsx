@@ -54,6 +54,7 @@ import {
   UserPlus,
   CheckCircle,
   XCircle,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   Tabs,
@@ -506,6 +507,44 @@ function BusinessParamsTab() {
     }
   };
 
+  // 转房规则：new(按新房价) / old(按原房价) / both(两房价分别)
+  const transferRule = useMemo(() => {
+    const raw = cfgMap.get("transfer_rule")?.configValue;
+    if (!raw) return { mode: "new" as string, newRoomRate: 0, oldRoomRate: 0 };
+    try {
+      const p = JSON.parse(raw);
+      return { mode: p.mode ?? "new", newRoomRate: Number(p.newRoomRate ?? 0), oldRoomRate: Number(p.oldRoomRate ?? 0) };
+    } catch {
+      return { mode: "new" as string, newRoomRate: 0, oldRoomRate: 0 };
+    }
+  }, [cfgMap]);
+
+  const saveTransferRule = async (mode: string) => {
+    try {
+      await api.updateSysConfig("transfer_rule", JSON.stringify({ mode, newRoomRate: transferRule.newRoomRate, oldRoomRate: transferRule.oldRoomRate }));
+      const label = mode === "new" ? "按新房价计费（原房按原价，之后按新房）" : mode === "old" ? "按原房价计费（全程按原房费率）" : "两房价分别结算（原房费 + 新房费）";
+      toast({ title: "转房规则已保存", description: label });
+      load();
+    } catch (e) {
+      toast({ title: "保存失败", description: String(e), variant: "destructive" });
+    }
+  };
+
+  // 预定房自动取消时间（分钟，0=不自动取消）
+  const reservationAutoCancel = Number(cfgMap.get("reservation_auto_cancel")?.configValue ?? "0");
+  const [resvCancelInput, setResvCancelInput] = useState(String(reservationAutoCancel));
+  useEffect(() => { setResvCancelInput(String(reservationAutoCancel)); }, [reservationAutoCancel]);
+  const saveResvCancel = async () => {
+    const mins = Number(resvCancelInput) || 0;
+    try {
+      await api.updateSysConfig("reservation_auto_cancel", String(mins));
+      toast({ title: "预定自动取消已保存", description: mins > 0 ? `超时 ${mins} 分钟未到店自动取消` : "不自动取消" });
+      load();
+    } catch (e) {
+      toast({ title: "保存失败", description: String(e), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-4 pb-6">
       {/* 门店名称 + 抹零方式 — 顶部基础参数 */}
@@ -697,6 +736,79 @@ function BusinessParamsTab() {
               onCheckedChange={toggleAutoDeliver}
               className="data-[state=checked]:bg-emerald-600 shrink-0"
             />
+          </div>
+        </CardContent>
+      </DarkCard>
+
+      {/* 转房规则 */}
+      <DarkCard>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="rounded-md bg-sky-500/15 p-1.5">
+              <ArrowRightLeft className="h-4 w-4 text-sky-400" />
+            </div>
+            <div>
+              <CardTitle className="text-base text-slate-100">转房规则</CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                客人转房时包厢费的计算方式
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {([
+              { value: "new", label: "按新房价", desc: "原房已开时间按原价，之后按新房费率" },
+              { value: "old", label: "按原房价", desc: "全程按原房费率计费" },
+              { value: "both", label: "两房价分别", desc: "原房费 + 新房费 分别结算" },
+            ] as const).map((opt) => {
+              const active = transferRule.mode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => saveTransferRule(opt.value)}
+                  className={cn(
+                    "rounded-lg border-2 p-3 text-left transition-all",
+                    active ? "border-sky-500 bg-sky-500/15" : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
+                  )}
+                >
+                  <div className={cn("text-sm font-bold", active ? "text-sky-300" : "text-slate-200")}>{opt.label}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </DarkCard>
+
+      {/* 预定房自动取消 */}
+      <DarkCard>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="rounded-md bg-amber-500/15 p-1.5">
+              <CalendarClock className="h-4 w-4 text-amber-400" />
+            </div>
+            <div>
+              <CardTitle className="text-base text-slate-100">预定房自动取消</CardTitle>
+              <CardDescription className="text-slate-400 text-xs">
+                预定时间过后多少分钟客人未到店，自动取消该预定
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={0}
+              value={resvCancelInput}
+              onChange={(e) => setResvCancelInput(e.target.value)}
+              onBlur={saveResvCancel}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              className="bg-slate-900/60 border-slate-700 text-slate-100 w-32"
+            />
+            <span className="text-sm text-slate-400">分钟</span>
+            <span className="text-xs text-slate-500">（0 = 不自动取消）</span>
           </div>
         </CardContent>
       </DarkCard>
@@ -2155,6 +2267,7 @@ function CreateGiftRuleDialog({ open, onClose, onSaved }: {
   const [deliveriesText, setDeliveriesText] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState<ProductInfo[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -2169,6 +2282,13 @@ function CreateGiftRuleDialog({ open, onClose, onSaved }: {
       setEnabled(true);
     }
   }, [open]);
+
+  // 加载在售物品列表供下拉选择（排除套餐）
+  useEffect(() => {
+    if (open && products.length === 0) {
+      api.getProducts().then(setProducts).catch(() => {});
+    }
+  }, [open, products.length]);
 
   const save = async () => {
     if (!name.trim() || !condProductName.trim() || !giftProductName.trim()) {
@@ -2230,12 +2350,16 @@ function CreateGiftRuleDialog({ open, onClose, onSaved }: {
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
               <Label className="text-xs text-slate-400">商品名称</Label>
-              <Input
-                value={condProductName}
-                onChange={(e) => setCondProductName(e.target.value)}
-                placeholder="例如：百威啤酒"
-                className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
-              />
+              <Select value={condProductName} onValueChange={setCondProductName}>
+                <SelectTrigger className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1">
+                  <SelectValue placeholder="选择商品" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 max-h-60">
+                  {products.filter((p) => !p.isPackage).map((p) => (
+                    <SelectItem key={p.id} value={p.name}>{p.name} · ¥{p.price.toFixed(2)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs text-slate-400">数量</Label>
@@ -2256,12 +2380,16 @@ function CreateGiftRuleDialog({ open, onClose, onSaved }: {
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
               <Label className="text-xs text-slate-400">赠送商品</Label>
-              <Input
-                value={giftProductName}
-                onChange={(e) => setGiftProductName(e.target.value)}
-                placeholder="例如：百威啤酒"
-                className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
-              />
+              <Select value={giftProductName} onValueChange={setGiftProductName}>
+                <SelectTrigger className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1">
+                  <SelectValue placeholder="选择商品" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 max-h-60">
+                  {products.map((p) => (
+                    <SelectItem key={p.id} value={p.name}>{p.name} · ¥{p.price.toFixed(2)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs text-slate-400">数量</Label>
