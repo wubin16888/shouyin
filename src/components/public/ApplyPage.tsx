@@ -9,8 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+
+const INDUSTRY_OPTIONS = [
+  { value: "ktv", label: "KTV", icon: "🎤", desc: "包厢·酒水·计时" },
+  { value: "supermarket", label: "超市", icon: "🛒", desc: "扫码·即买即走" },
+  { value: "billiards", label: "台球室", icon: "🎱", desc: "球桌·计时" },
+  { value: "restaurant", label: "饭店", icon: "🍽️", desc: "餐桌·点菜" },
+];
 
 export function ApplyPage({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
@@ -82,21 +89,37 @@ export function ApplyPage({ onClose }: { onClose: () => void }) {
                   className="bg-slate-900/60 border-slate-700 text-slate-100" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-slate-200">区域</Label>
-                <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}
-                  className="bg-slate-900/60 border-slate-700 text-slate-100" />
-              </div>
-              <div>
-                <Label className="text-slate-200">业态</Label>
-                <Select value={form.businessType} onValueChange={(v) => setForm({ ...form, businessType: v })}>
-                  <SelectTrigger className="bg-slate-900/60 border-slate-700 text-slate-100"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ktv">KTV</SelectItem>
-                    <SelectItem value="supermarket">超市</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div>
+              <Label className="text-slate-200">区域</Label>
+              <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}
+                placeholder="如：上海·浦东"
+                className="bg-slate-900/60 border-slate-700 text-slate-100" />
+            </div>
+            <div>
+              <Label className="text-slate-200">业态 *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {INDUSTRY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setForm({ ...form, businessType: opt.value })}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all",
+                      form.businessType === opt.value
+                        ? "border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500/50 shadow-md shadow-emerald-900/30"
+                        : "border-slate-700 bg-slate-900/60 hover:border-slate-600 hover:bg-slate-800/60",
+                    )}
+                  >
+                    <span className="text-2xl shrink-0">{opt.icon}</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className={cn(
+                        "text-sm font-semibold leading-tight",
+                        form.businessType === opt.value ? "text-emerald-300" : "text-slate-200",
+                      )}>{opt.label}</span>
+                      <span className="text-[10px] text-slate-500 leading-tight truncate">{opt.desc}</span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
             <div>

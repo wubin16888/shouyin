@@ -30,11 +30,19 @@ import {
   Sparkles,
   ChevronRight,
   LogIn,
+  KeyRound,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import { useUIStore } from "@/store/ui-store";
+import { useAuth as useAuthStore } from "@/store/auth-store";
+import { useIndustry } from "@/store/industry-store";
 
 export type ModuleKey =
   // 云端管理
@@ -116,11 +124,18 @@ interface AppShellProps {
   active: ModuleKey;
   onNavigate: (key: ModuleKey) => void;
   children: React.ReactNode;
+  allowedModules?: string[];
+  onLogout?: () => void;
 }
 
-export function AppShell({ active, onNavigate, children }: AppShellProps) {
+export function AppShell({ active, onNavigate, children, allowedModules, onLogout }: AppShellProps) {
   const { theme, toggleTheme, sidebarOpen, setSidebarOpen } = useUIStore();
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [pwOpen, setPwOpen] = useState(false);
+  const { user } = useAuthStore();
+  const { template, loadFromServer } = useIndustry();
+
+  useEffect(() => { loadFromServer(); }, [loadFromServer]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -241,10 +256,10 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
             </div>
             <div className="flex flex-col leading-tight">
               <span className="text-sm sm:text-base font-bold tracking-tight bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-                KTV 管理系统
+                {template.icon} {template.name}管理系统
               </span>
-              <span className="hidden sm:inline text-[10px] text-slate-500 tracking-wider uppercase">
-                Cloud · Edge · Sync
+              <span className="hidden sm:inline text-[10px] text-emerald-400/80 tracking-wider font-medium">
+                {user?.storeName ?? "未指定门店"}
               </span>
             </div>
           </div>
@@ -271,14 +286,29 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
             >
               <Store className="h-4 w-4" /> 门店申请
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { window.location.href = "/?login=1"; }}
-              className="text-slate-300 hover:bg-slate-800/60 hover:text-emerald-300 gap-1.5"
-            >
-              <LogIn className="h-4 w-4" /> 登录
-            </Button>
+            {!user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { window.location.href = "/?login=1"; }}
+                className="text-slate-300 hover:bg-slate-800/60 hover:text-emerald-300 gap-1.5"
+              >
+                <LogIn className="h-4 w-4" /> 登录
+              </Button>
+            )}
+            {user && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800/60 border border-slate-700/50">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {user.name.slice(0, 1)}
+                </div>
+                <div className="hidden sm:block">
+                  <div className="text-xs font-medium text-slate-200 leading-tight">{user.name}</div>
+                  <div className="text-[10px] text-slate-500 leading-tight">
+                    {(user as any).userType === "cloud_admin" ? "☁️ 云端管理员" : `${user.storeName ?? ""} · ${user.isStoreAdmin ? "门店管理员" : user.role}`}
+                  </div>
+                </div>
+              </div>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -288,6 +318,18 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
             >
               {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
+            {user && (
+              <Button variant="ghost" size="sm" onClick={() => setPwOpen(true)}
+                className="text-slate-400 hover:bg-slate-800/60 hover:text-emerald-300 gap-1.5">
+                <KeyRound className="h-4 w-4" /><span className="hidden sm:inline">改密</span>
+              </Button>
+            )}
+            {onLogout && (
+              <Button variant="ghost" size="sm" onClick={() => { if (confirm("确定退出？")) { onLogout(); window.location.reload(); } }}
+                className="text-slate-400 hover:bg-red-950/40 hover:text-red-400 gap-1.5">
+                <LogOut className="h-4 w-4" /><span className="hidden sm:inline">退出</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -307,6 +349,8 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
           <nav className="flex h-full flex-col gap-5 p-4">
             {NAV_GROUPS.map((group) => {
               const GroupIcon = group.icon;
+              const visibleItems = allowedModules ? group.items.filter((item) => allowedModules.includes(item.key)) : group.items;
+              if (visibleItems.length === 0) return null;
               return (
                 <div key={group.title} className="space-y-1.5">
                   {/* 分组标题：小图标 + 字母间距 */}
@@ -314,7 +358,7 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
                     <GroupIcon className="h-3 w-3 text-slate-600" />
                     {group.title}
                   </div>
-                  {group.items.map((item) => {
+                  {visibleItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = active === item.key;
                     return (
@@ -384,12 +428,19 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
               <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">
                 {activeItem?.label}
               </h1>
+              {user?.storeName && (
+                <Badge variant="outline" className="border-emerald-700/40 bg-emerald-950/40 text-emerald-300 text-xs ml-2">
+                  {template.icon} {user.storeName}
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-slate-400 mt-1.5 ml-4">{activeItem?.desc}</p>
           </div>
           {children}
         </main>
       </div>
+
+      {pwOpen && <ChangePwDialog username={user?.username ?? ""} onClose={() => setPwOpen(false)} />}
 
       {/* sticky footer */}
       <footer className="mt-auto border-t border-slate-800 bg-slate-950">
@@ -406,5 +457,90 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
         </div>
       </footer>
     </div>
+  );
+}
+
+// 修改密码弹窗 — 调 /api/auth/change-password
+function ChangePwDialog({ username, onClose }: { username: string; onClose: () => void }) {
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const submit = async () => {
+    if (!oldPw || !newPw || !confirmPw) {
+      toast({ title: "请填写完整", variant: "destructive" });
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast({ title: "两次新密码不一致", variant: "destructive" });
+      return;
+    }
+    if (newPw.length < 4) {
+      toast({ title: "新密码至少 4 位", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, oldPassword: oldPw, newPassword: newPw }),
+      });
+      const body = await res.json();
+      if (body.code === 200) {
+        toast({ title: "密码已修改", description: "下次登录请使用新密码" });
+        onClose();
+      } else {
+        toast({ title: "修改失败", description: body.msg, variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "网络错误", description: String(e), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-100">
+            <KeyRound className="h-5 w-5 text-emerald-400" />
+            修改密码
+          </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            账号：{username}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-slate-200">原密码</Label>
+            <Input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)}
+              className="bg-slate-800/60 border-slate-700 text-slate-100" />
+          </div>
+          <div>
+            <Label className="text-slate-200">新密码</Label>
+            <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+              className="bg-slate-800/60 border-slate-700 text-slate-100" />
+          </div>
+          <div>
+            <Label className="text-slate-200">确认新密码</Label>
+            <Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              className="bg-slate-800/60 border-slate-700 text-slate-100" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}
+            className="bg-slate-800 border-slate-700 text-slate-300">取消</Button>
+          <Button onClick={submit} disabled={loading}
+            className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+            {loading ? "提交中..." : <><KeyRound className="h-4 w-4" /> 确认修改</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

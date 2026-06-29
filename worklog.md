@@ -683,3 +683,38 @@ Work Log:
 Stage Summary:
 - 完整闭环全部打通：门店申请→审批→管理员→生成入职码→员工扫码→审核→员工登录→按权限路由
 - 入职界面在 系统维护→人事 Tab
+
+---
+Task ID: V2-RESTORE
+Agent: frontend-fix (Z.ai Code)
+Task: 恢复 git reset 丢失的功能（前端，仅改 2 个文件）
+
+Work Log:
+- 先读 worklog.md 全文（V2 系列）+ auth-store/industry-store/page.tsx/login route/industry.ts/dialog.tsx/use-toast.ts 等周边上下文
+- 文件1 AppShell.tsx（8 处修改）：
+  1. lucide-react imports 加 KeyRound, LogOut
+  2. 加 Dialog/Input/Label/useToast imports
+  3. 顶栏右侧重构：登录按钮包 `{!user && ...}`；主题切换前加用户信息卡（圆形渐变头像 + 用户名 + 副标题，`(user as any).userType === "cloud_admin" ? "☁️ 云端管理员" : "门店名·角色"`）；主题切换后加「改密」按钮（setPwOpen(true)）+「退出」按钮（confirm + onLogout + reload）
+  4. 侧边栏按 allowedModules 过滤：visibleItems = allowedModules ? filter : items；空数组 return null；{group.items.map → {visibleItems.map
+  5. 模块标题 h1 后加门店名 Badge（emerald outline + template.icon + storeName）
+  6. footer 前加 ChangePwDialog 渲染：{pwOpen && <ChangePwDialog username={user?.username ?? ""} onClose={() => setPwOpen(false)} />}
+  7. 文件末尾加 ChangePwDialog 函数组件：3 Input（原密码/新密码/确认）+ KeyRound 图标标题 + 校验（必填/两次一致/≥4位）+ POST /api/auth/change-password + toast 反馈 + Enter 提交
+  8. AI 主题 CSS 变量（--ai-bg/--ai-card-bg/--ai-text/--ai-border/--ai-accent/--ai-glow/--ai-sidebar-bg/--ai-header-bg/--ai-radius/--ai-shadow/--ai-room-shadow/--ai-room-border/--ai-text-muted）已存在根 div style，无需新增
+- 文件2 ApplyPage.tsx（2 处修改）：
+  1. imports 调整：移除 Select 系列；加 cn from @/lib/utils；定义 INDUSTRY_OPTIONS（4 行业：KTV🎤/超市🛒/台球室🎱/饭店🍽️，各带 desc）
+  2. 业态 Select 替换为行业卡片网格：原 2 列（区域+业态 Select）拆为 区域 Input 独立一行 + 业态 4 卡片 grid-cols-2 gap-3。选中态 emerald 边框 + emerald-950/40 背景 + ring-1 + shadow；未选中 slate-700 + hover slate-800/60。每卡片 emoji 2xl + 标签 + desc 灰色小字
+
+验证:
+- ✅ bun run lint：0 errors / 0 warnings（exit 0）
+- ✅ dev.log 末尾 "✓ Compiled in 175ms" + 持续 200 响应（/api/ktv/rooms /api/ktv/dashboard /api/dashboard 等正常）
+- 中途 MultiEdit 误写 "components/ui/button"（缺 @/ 前缀），dev.log 报 Module not found，Edit 修复后编译恢复
+
+Stage Summary:
+- 2 个文件恢复完成：AppShell.tsx 286→547 行，ApplyPage.tsx 124→138 行
+- 顶栏用户身份信息 + 改密/退出按钮已挂载，UX 一致（已登录显示用户卡，未登录显示登录按钮）
+- 侧边栏按权限模块过滤，空分组自动隐藏
+- 模块标题旁显示门店名 Badge，强化当前门店上下文
+- ChangePwDialog 弹窗完整：3 密码字段 + 校验 + Enter 提交 + toast 反馈
+- ApplyPage 业态从 Select 升级为 4 行业卡片网格，更直观
+- 已知遗留：/api/auth/change-password 后端路由未实现（约束只改 2 文件未补），前端 dialog 调用会 404；如需可用需后续代理补该 route
+- 工作记录已同步写入 /home/z/my-project/agent-ctx/V2-RESTORE-frontend-fix.md
