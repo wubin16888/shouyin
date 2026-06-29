@@ -8,8 +8,7 @@ import { LoginPage } from "@/components/public/LoginPage";
 import { ApplyPage } from "@/components/public/ApplyPage";
 import { JoinPage } from "@/components/public/JoinPage";
 import { useAuth } from "@/store/auth-store";
-import { useIndustry } from "@/store/industry-store";
-// @ts-ignore
+import { useIndustry } from "@/store/industrystore";
 // KTV 业务
 import { SystemModule } from "@/components/modules/SystemModule";
 import { CashierModule } from "@/components/modules/CashierModule";
