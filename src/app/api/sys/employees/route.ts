@@ -4,10 +4,10 @@ import { ok, fail, parseError } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const list = await db.employee.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       orderBy: [{ status: "desc" }, { entryDate: "desc" }],
     });
     return ok(list.map((e) => ({
@@ -23,11 +23,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const b = await req.json();
     const now = new Date();
     const e = await db.employee.create({
-      data: { storeId: 1001, name: b.name, phone: b.phone ?? null,
+      data: { storeId, name: b.name, phone: b.phone ?? null,
         position: b.position ?? "waiter", department: b.department ?? null,
         role: b.role ?? "cashier", discount: Number(b.discount ?? 1),
         monthlyGiftLimit: Number(b.monthlyGiftLimit ?? 0), usedGiftAmount: 0,

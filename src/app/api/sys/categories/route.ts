@@ -5,10 +5,10 @@ import type { ProductCategoryInfo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const cats = await db.productCategory.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       include: {
         subcategories: { orderBy: { sortOrder: "asc" } },
         _count: { select: { products: true } },
@@ -28,11 +28,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const { name } = await req.json();
     if (!name) return fail("缺少 name");
     const cat = await db.productCategory.create({
-      data: { storeId: 1001, name, sortOrder: 0 },
+      data: { storeId, name, sortOrder: 0 },
     });
     return ok({ id: cat.id, name: cat.name });
   } catch (e) {

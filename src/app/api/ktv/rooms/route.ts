@@ -5,9 +5,11 @@ import type { KtvRoomInfo, KtvRoomInfoV2 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const storeId = Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001);
     const rooms = await db.ktvRoom.findMany({
+      where: { storeId },
       orderBy: [{ roomType: "asc" }, { roomNo: "asc" }],
     });
 

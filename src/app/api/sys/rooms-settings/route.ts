@@ -4,10 +4,10 @@ import { ok, fail, parseError } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const rooms = await db.ktvRoom.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       orderBy: [{ area: "asc" }, { roomNo: "asc" }],
     });
     return ok(rooms.map((r) => ({
@@ -22,10 +22,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const b = await req.json();
     const r = await db.ktvRoom.create({
-      data: { storeId: 1001, roomNo: b.roomNo, roomName: b.roomName ?? b.roomNo,
+      data: { storeId, roomNo: b.roomNo, roomName: b.roomName ?? b.roomNo,
         roomType: b.roomType ?? "中包", area: b.area ?? null,
         capacity: Number(b.capacity ?? 6), hourlyRate: Number(b.hourlyRate ?? 38),
         minSpend: Number(b.minSpend ?? 0), billingMode: b.billingMode ?? "hourly",

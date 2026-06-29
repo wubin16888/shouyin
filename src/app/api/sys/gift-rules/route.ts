@@ -5,10 +5,10 @@ import type { GiftRuleInfo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const rules = await db.giftRule.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       orderBy: { createdAt: "desc" },
     });
     return ok<GiftRuleInfo[]>(
@@ -27,11 +27,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const b = await req.json();
     const r = await db.giftRule.create({
       data: {
-        storeId: 1001,
+        storeId,
         name: b.name,
         condProductId: b.condProductId ?? null,
         condProductName: b.condProductName,

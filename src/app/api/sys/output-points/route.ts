@@ -4,10 +4,10 @@ import { ok, fail, parseError } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const list = await db.outputPoint.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       orderBy: { deptCode: "asc" },
     });
     return ok(list.map((o) => ({
@@ -21,10 +21,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const b = await req.json();
     const op = await db.outputPoint.create({
-      data: { storeId: 1001, deptCode: b.deptCode, name: b.name, ip: b.ip ?? null,
+      data: { storeId, deptCode: b.deptCode, name: b.name, ip: b.ip ?? null,
         printMode: b.printMode ?? "client", relayServer: b.relayServer ?? null,
         computerName: b.computerName ?? null, enabled: b.enabled !== false },
     });

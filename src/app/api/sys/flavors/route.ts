@@ -5,10 +5,10 @@ import type { FlavorCategoryInfo } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const cats = await db.flavorCategory.findMany({
-      where: { storeId: 1001 },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001) },
       include: { flavors: { orderBy: { sortOrder: "asc" } } },
       orderBy: { sortOrder: "asc" },
     });
@@ -24,11 +24,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const { name, required, flavors } = await req.json();
     if (!name) return fail("缺少 name");
     const cat = await db.flavorCategory.create({
-      data: { storeId: 1001, name, required: !!required, sortOrder: 0 },
+      data: { storeId, name, required: !!required, sortOrder: 0 },
     });
     if (Array.isArray(flavors)) {
       for (let i = 0; i < flavors.length; i++) {

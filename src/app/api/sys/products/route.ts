@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const dept = searchParams.get("dept");
     const products = await db.product.findMany({
-      where: { storeId: 1001, ...(dept ? { outputDept: dept } : {}) },
+      where: { storeId: Number(new URL(req.url).searchParams.get("storeId") ?? req.headers.get("X-Store-Id") ?? 1001), ...(dept ? { outputDept: dept } : {}) },
       include: {
         category: { select: { name: true } },
         subcategory: { select: { name: true } },
@@ -37,11 +37,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+    const storeId = Number(req.headers.get("X-Store-Id") ?? 1001);
   try {
     const body = await req.json();
     const p = await db.product.create({
       data: {
-        storeId: 1001,
+        storeId,
         name: body.name,
         categoryId: body.categoryId,
         subcategoryId: body.subcategoryId ?? null,
