@@ -173,16 +173,17 @@ export function ProductionModule() {
   useEffect(() => {
     if (!voiceEnabled) return;
     const currentPending = pendingItems.length;
-    // 只有新增了待出品订单才播报（不播报首次加载的）
     if (currentPending > lastPendingCount && lastPendingCount > 0) {
       const newCount = currentPending - lastPendingCount;
       const msg = `${deptLabel(dept)}收到${newCount}个新订单`;
       try {
-        const utterance = new SpeechSynthesisUtterance(msg);
-        utterance.lang = "zh-CN";
-        utterance.rate = 1.2;
-        utterance.volume = 1;
-        speechSynthesis.speak(utterance);
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(msg);
+          utterance.lang = "zh-CN";
+          utterance.rate = 1.2;
+          utterance.volume = 1;
+          window.speechSynthesis.speak(utterance);
+        }
       } catch { /* 浏览器不支持语音 */ }
     }
     setLastPendingCount(currentPending);
