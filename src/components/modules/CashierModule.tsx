@@ -36,6 +36,7 @@ import {
   Cherry,
   CalendarClock,
   Wrench,
+  LogIn,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -304,6 +305,7 @@ export function CashierModule() {
   const [successBill, setSuccessBill] = useState<OrderBill | null>(null);
   const [reserveOpen, setReserveOpen] = useState(false);
   const [maintainOpen, setMaintainOpen] = useState(false);
+  const [shiftOpen, setShiftOpen] = useState(false);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -447,6 +449,14 @@ export function CashierModule() {
           <Button size="sm" variant="outline" onClick={load} className="gap-1.5 bg-slate-800 border-slate-700 text-slate-100 hover:bg-slate-700 hover:border-slate-600 rounded-lg h-8">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> 刷新
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShiftOpen(true)}
+            className="gap-1.5 bg-emerald-950/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/40 hover:border-emerald-600 rounded-lg h-8"
+          >
+            <LogIn className="h-3.5 w-3.5" /> 交接班
+          </Button>
         </div>
       </div>
 
@@ -565,6 +575,8 @@ export function CashierModule() {
           load();
         }}
       />
+
+      <ShiftDialog open={shiftOpen} onClose={() => setShiftOpen(false)} />
 
       <AiChatWidget title="收银助手" buttonColor="bg-emerald-600 hover:bg-emerald-500" />
     </div>
@@ -2672,5 +2684,125 @@ function PayBtn({ active, onClick, icon, label, disabled }: { active: boolean; o
       {icon}
       <span className="text-[10px]">{label}</span>
     </button>
+  );
+}
+
+// ============ 交接班弹窗 ============
+function ShiftDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [shift, setShift] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [empName, setEmpName] = useState("");
+  const [startCash, setStartCash] = useState("");
+  const [endCash, setEndCash] = useState("");
+  const [remark, setRemark] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const load = useCallback(async () => {
+    try {
+      const [cur, hist] = await Promise.all([api.getCurrentShift(), api.getShifts()]);
+      setShift(cur.shift);
+      setStats(cur.stats);
+      setHistory(hist.slice(0, 5));
+      if (cur.shift) setEmpName(cur.shift.employeeName);
+    } catch {}
+  }, []);
+
+  useEffect(() => { if (open) load(); }, [open, load]);
+
+  const start = async () => {
+    setLoading(true);
+    try {
+      await api.startShift(empName || "收银员", Number(startCash) || 0);
+      toast({ title: "班次已开始" });
+      load();
+    } catch (e) { toast({ title: "失败", description: String(e), variant: "destructive" }); }
+    finally { setLoading(false); }
+  };
+
+  const close = async () => {
+    if (!shift) return;
+    setLoading(true);
+    try {
+      await api.closeShift(shift.id, Number(endCash) || 0, remark);
+      toast({ title: "交接班完成", description: `营收: ¥${stats?.totalRevenue ?? 0}` });
+      onClose();
+      load();
+    } catch (e) { toast({ title: "失败", description: String(e), variant: "destructive" }); }
+    finally { setLoading(false); }
+  };
+
+  if (!open) return null;
+
+  const payLabels: Record<string, string> = { cash: "现金", wechat: "微信", alipay: "支付宝", member: "会员卡", card: "银行卡" };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="bg-slate-900 border-slate-700 text-slate-100 max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><LogIn className="h-5 w-5 text-emerald-400" /> 交接班</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {shift ? (
+            <>
+              <div className="rounded-lg bg-slate-800/60 p-3 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-slate-400">收银员</span><span>{shift.employeeName}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">开始时间</span><span>{new Date(shift.startAt).toLocaleString("zh-CN")}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">起始现金</span><span>¥{shift.startCash}</span></div>
+                {stats && (
+                  <>
+                    <div className="border-t border-slate-700/50 pt-2 mt-2">
+                      <div className="flex justify-between font-medium"><span>总营收</span><span className="text-emerald-400">¥{stats.totalRevenue}</span></div>
+                      <div className="flex justify-between text-xs text-slate-400 mt-1"><span>订单数</span><span>{stats.orderCount}</span></div>
+                      <div className="flex justify-between text-xs text-slate-400"><span>开台数</span><span>{stats.openCount}</span></div>
+                    </div>
+                    {stats.revenueByMethod && Object.entries(stats.revenueByMethod).map(([m, amt]) => (
+                      <div key={m} className="flex justify-between text-xs"><span className="text-slate-400">{payLabels[m] ?? m}</span><span>¥{amt as number}</span></div>
+                    ))}
+                  </>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">结束现金</Label>
+                <Input type="number" value={endCash} onChange={(e) => setEndCash(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">备注</Label>
+                <Input value={remark} onChange={(e) => setRemark(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+              </div>
+              <Button onClick={close} disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-500">
+                {loading ? "处理中..." : "确认交班"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs text-slate-400">收银员姓名</Label>
+                <Input value={empName} onChange={(e) => setEmpName(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">起始现金</Label>
+                <Input type="number" value={startCash} onChange={(e) => setStartCash(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+              </div>
+              <Button onClick={start} disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-500">
+                {loading ? "处理中..." : "开始班次"}
+              </Button>
+            </>
+          )}
+          {history.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs text-slate-500 font-medium">最近交接班</div>
+              {history.map((h) => (
+                <div key={h.id} className="text-xs text-slate-400 flex justify-between rounded-md bg-slate-800/40 px-2 py-1">
+                  <span>{h.employeeName} · {new Date(h.startAt).toLocaleDateString("zh-CN")}</span>
+                  <span className={h.status === "active" ? "text-emerald-400" : "text-slate-500"}>{h.status === "active" ? "进行中" : `¥${h.totalRevenue ?? 0}`}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

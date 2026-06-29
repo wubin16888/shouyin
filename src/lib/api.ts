@@ -373,4 +373,24 @@ export const api = {
     request<any>(`/api/finance/category-sales?${startDate ? `startDate=${startDate}&` : ""}${endDate ? `endDate=${endDate}` : ""}`),
   getProductionDetail: (params: { dept?: string; category?: string; startDate?: string; endDate?: string }) =>
     request<any>(`/api/finance/production-detail?${new URLSearchParams(Object.entries(params).reduce((a, [k, v]) => { if (v) a[k] = String(v); return a; }, {} as Record<string, string>))}`),
+
+  // 物品单位
+  getUnits: () => request<any[]>("/api/sys/units"),
+  createUnit: (name: string) => request<any>("/api/sys/units", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteUnit: (id: string) => request<any>("/api/sys/units", { method: "DELETE", body: JSON.stringify({ id }) }),
+
+  // 计时计费
+  getBillingRules: () => request<any[]>("/api/sys/billing-rules"),
+  saveBillingRule: (data: Record<string, unknown>) =>
+    data.id ? request<any>("/api/sys/billing-rules", { method: "PUT", body: JSON.stringify(data) })
+            : request<any>("/api/sys/billing-rules", { method: "POST", body: JSON.stringify(data) }),
+  deleteBillingRule: (id: string) => request<any>("/api/sys/billing-rules", { method: "DELETE", body: JSON.stringify({ id }) }),
+
+  // 交接班
+  getShifts: () => request<any[]>("/api/ktv/shifts"),
+  getCurrentShift: () => request<any>("/api/ktv/shifts/current"),
+  startShift: (employeeName: string, startCash?: number) =>
+    request<any>("/api/ktv/shifts", { method: "POST", body: JSON.stringify({ employeeName, startCash }) }),
+  closeShift: (shiftId: string, endCash?: number, remark?: string) =>
+    request<any>("/api/ktv/shifts", { method: "PUT", body: JSON.stringify({ shiftId, endCash, remark }) }),
 };
