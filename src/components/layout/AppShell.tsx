@@ -140,7 +140,16 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
     let cancelled = false;
     const loadTheme = async () => {
       try {
-        const res = await fetch("/api/sys/config?category=system");
+        // 从 localStorage 读门店 ID
+        let storeId = 1001;
+        try {
+          const authStr = localStorage.getItem("ktv-auth");
+          if (authStr) {
+            const auth = JSON.parse(authStr);
+            if (auth?.state?.user?.storeId) storeId = auth.state.user.storeId;
+          }
+        } catch {}
+        const res = await fetch(`/api/sys/config?category=system&storeId=${storeId}`);
         const body = await res.json();
         if (!cancelled && body.data) {
           const cfgs = body.data;
@@ -185,7 +194,21 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
       style={{
         backgroundColor: themeColors.bg || undefined,
         color: themeColors.text || undefined,
-      }}
+        // 用 CSS 变量让所有子组件继承 AI 主题色
+        "--ai-bg": themeColors.bg || "transparent",
+        "--ai-card-bg": themeColors.card || "transparent",
+        "--ai-text": themeColors.text || "inherit",
+        "--ai-border": themeColors.visual?.borderColor || "rgba(148,163,184,0.2)",
+        "--ai-accent": themeColors.visual?.accentColor || "#059669",
+        "--ai-glow": themeColors.visual?.glowEffect || "none",
+        "--ai-sidebar-bg": themeColors.visual?.sidebarBg || "transparent",
+        "--ai-header-bg": themeColors.visual?.headerBg || "transparent",
+        "--ai-radius": themeColors.visual?.borderRadius ? `${themeColors.visual.borderRadius}px` : "12px",
+        "--ai-shadow": themeColors.visual?.boxShadow || "none",
+        "--ai-room-shadow": themeColors.visual?.roomShadow || "none",
+        "--ai-room-border": themeColors.visual?.roomBorder || "none",
+        "--ai-text-muted": themeColors.visual?.textMuted || "rgba(148,163,184,0.8)",
+      } as React.CSSProperties}
     >
       {/* 顶栏 — 渐变 + 玻璃质感 + AI 主题 */}
       <header

@@ -120,3 +120,49 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ============ AI 主题全局覆盖 ============ */
+/* 当 AI 主题生效时（--ai-bg 不为 transparent），覆盖 Tailwind 的固定颜色 */
+[style*="--ai-bg"] {
+  /* 页面背景 */
+  background-color: var(--ai-bg) !important;
+}
+
+/* 侧边栏背景覆盖 */
+[style*="--ai-bg"] aside {
+  background-color: var(--ai-sidebar-bg) !important;
+  border-color: var(--ai-border) !important;
+}
+
+/* 顶栏背景覆盖 */
+[style*="--ai-bg"] header {
+  background: var(--ai-header-bg) !important;
+  border-color: var(--ai-border) !important;
+}
+
+/* 卡片背景覆盖（bg-slate-800 bg-slate-900 等深色卡片） */
+[style*="--ai-bg"] .bg-slate-900,
+[style*="--ai-bg"] .bg-slate-800,
+[style*="--ai-bg"] .bg-slate-800\/60,
+[style*="--ai-bg"] .bg-slate-800\/80,
+[style*="--ai-bg"] .bg-slate-800\/50,
+[style*="--ai-bg"] .bg-slate-800\/40,
+[style*="--ai-bg"] .bg-slate-900\/60,
+[style*="--ai-bg"] .bg-slate-900\/95,
+[style*="--ai-bg"] .bg-slate-950 {
+  background-color: var(--ai-card-bg) !important;
+}
+
+/* 边框覆盖 */
+[style*="--ai-bg"] .border-slate-700,
+[style*="--ai-bg"] .border-slate-700\/50,
+[style*="--ai-bg"] .border-slate-700\/60 {
+  border-color: var(--ai-border) !important;
+}
+
+/* 强调色覆盖（emerald 按钮） */
+[style*="--ai-bg"] .bg-emerald-600,
+[style*="--ai-bg"] .bg-emerald-500,
+[style*="--ai-bg"] .bg-emerald-700 {
+  background-color: var(--ai-accent) !important;
+}
