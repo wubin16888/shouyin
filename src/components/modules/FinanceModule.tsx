@@ -69,6 +69,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { AiChatWidget } from "@/components/common/AiChatWidget";
 import type {
   KtvRoomInfoV2,
   KtvDashboardSummary,
@@ -274,6 +275,8 @@ export function FinanceModule() {
           <WeeklyTab />
         </TabsContent>
       </Tabs>
+
+      <AiChatWidget title="财务助手" buttonColor="bg-sky-600 hover:bg-sky-500" />
     </div>
   );
 }

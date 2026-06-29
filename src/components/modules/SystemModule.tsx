@@ -105,6 +105,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { AiChatWidget } from "@/components/common/AiChatWidget";
 import type {
   SysConfigInfo,
   ProductCategoryInfo,
@@ -322,6 +323,8 @@ export function SystemModule() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AiChatWidget title="系统助手" buttonColor="bg-violet-600 hover:bg-violet-500" />
     </div>
   );
 }

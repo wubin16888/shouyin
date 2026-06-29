@@ -67,6 +67,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
+import { AiChatWidget } from "@/components/common/AiChatWidget";
 import type {
   KtvRoomInfoV2,
   KtvOrderInfoV2,
@@ -519,6 +520,8 @@ export function CashierModule() {
         bill={successBill}
         onClose={() => setSuccessBill(null)}
       />
+
+      <AiChatWidget title="收银助手" buttonColor="bg-emerald-600 hover:bg-emerald-500" />
     </div>
   );
 }

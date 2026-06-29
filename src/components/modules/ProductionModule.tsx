@@ -20,6 +20,8 @@ import {
   BarChart3,
   Search,
   X,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import {
   BarChart,
@@ -164,6 +166,28 @@ export function ProductionModule() {
     return () => clearInterval(t);
   }, [load]);
 
+  // ============ 语音播报：新订单进来时自动播报 ============
+  const [lastPendingCount, setLastPendingCount] = useState(0);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+  useEffect(() => {
+    if (!voiceEnabled) return;
+    const currentPending = pendingItems.length;
+    // 只有新增了待出品订单才播报（不播报首次加载的）
+    if (currentPending > lastPendingCount && lastPendingCount > 0) {
+      const newCount = currentPending - lastPendingCount;
+      const msg = `${deptLabel(dept)}收到${newCount}个新订单`;
+      try {
+        const utterance = new SpeechSynthesisUtterance(msg);
+        utterance.lang = "zh-CN";
+        utterance.rate = 1.2;
+        utterance.volume = 1;
+        speechSynthesis.speak(utterance);
+      } catch { /* 浏览器不支持语音 */ }
+    }
+    setLastPendingCount(currentPending);
+  }, [pendingItems.length, voiceEnabled, lastPendingCount, dept]);
+
   // 从所有 open 订单中提取 items，关联 roomNo
   type ItemWithRoom = KtvOrderItemInfoV2 & { roomNo: string; roomType: string; customerName: string | null; openedAt: string };
   const allItems: ItemWithRoom[] = useMemo(() => {
@@ -253,11 +277,22 @@ export function ProductionModule() {
         </TabsList>
 
         <TabsContent value="board" className="focus-visible:outline-none">
-      {/* 顶部 KPI */}
-      <div className="grid gap-3 grid-cols-3 mb-5">
-        <KpiCard title="待出品" value={stats.pending} loading={loading} color="#f59e0b" icon={<Clock className="h-4 w-4" />} />
-        <KpiCard title="已出品" value={stats.delivered} loading={loading} color="#10b981" icon={<CheckCircle2 className="h-4 w-4" />} />
-        <KpiCard title="今日出品总数" value={stats.todayDelivered} loading={loading} color="#3b82f6" icon={<Receipt className="h-4 w-4" />} />
+      {/* 顶部 KPI + 语音开关 */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="grid gap-3 grid-cols-3 flex-1">
+          <KpiCard title="待出品" value={stats.pending} loading={loading} color="#f59e0b" icon={<Clock className="h-4 w-4" />} />
+          <KpiCard title="已出品" value={stats.delivered} loading={loading} color="#10b981" icon={<CheckCircle2 className="h-4 w-4" />} />
+          <KpiCard title="今日出品总数" value={stats.todayDelivered} loading={loading} color="#3b82f6" icon={<Receipt className="h-4 w-4" />} />
+        </div>
+        <Button
+          size="sm"
+          variant={voiceEnabled ? "default" : "outline"}
+          onClick={() => setVoiceEnabled(!voiceEnabled)}
+          className={cn("gap-1.5 h-10 shrink-0", voiceEnabled && "bg-amber-600 hover:bg-amber-500")}
+        >
+          {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          {voiceEnabled ? "语音开" : "语音关"}
+        </Button>
       </div>
       {/* 顶部装饰条 — 4 个部门彩色图标 */}
       <div className="flex flex-wrap items-center gap-2 mb-5 bg-slate-800/60 rounded-xl p-2 border border-slate-700/50">
