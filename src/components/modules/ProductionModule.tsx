@@ -166,28 +166,9 @@ export function ProductionModule() {
     return () => clearInterval(t);
   }, [load]);
 
-  // ============ 语音播报：新订单进来时自动播报 ============
+  // 语音播报状态声明（useEffect 在 pendingItems 定义之后）
   const [lastPendingCount, setLastPendingCount] = useState(0);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-
-  useEffect(() => {
-    if (!voiceEnabled) return;
-    const currentPending = pendingItems.length;
-    if (currentPending > lastPendingCount && lastPendingCount > 0) {
-      const newCount = currentPending - lastPendingCount;
-      const msg = `${deptLabel(dept)}收到${newCount}个新订单`;
-      try {
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          const utterance = new SpeechSynthesisUtterance(msg);
-          utterance.lang = "zh-CN";
-          utterance.rate = 1.2;
-          utterance.volume = 1;
-          window.speechSynthesis.speak(utterance);
-        }
-      } catch { /* 浏览器不支持语音 */ }
-    }
-    setLastPendingCount(currentPending);
-  }, [pendingItems.length, voiceEnabled, lastPendingCount, dept]);
 
   // 从所有 open 订单中提取 items，关联 roomNo
   type ItemWithRoom = KtvOrderItemInfoV2 & { roomNo: string; roomType: string; customerName: string | null; openedAt: string };
@@ -219,6 +200,26 @@ export function ProductionModule() {
       .filter((it) => it.outputDept === dept && it.status === "delivered")
       .sort((a, b) => new Date(b.deliveredAt ?? b.createdAt).getTime() - new Date(a.deliveredAt ?? a.createdAt).getTime());
   }, [allItems, dept]);
+
+  // ============ 语音播报：新订单进来时自动播报（必须在 pendingItems 之后）============
+  useEffect(() => {
+    if (!voiceEnabled) return;
+    const currentPending = pendingItems.length;
+    if (currentPending > lastPendingCount && lastPendingCount > 0) {
+      const newCount = currentPending - lastPendingCount;
+      const msg = `${deptLabel(dept)}收到${newCount}个新订单`;
+      try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance(msg);
+          utterance.lang = "zh-CN";
+          utterance.rate = 1.2;
+          utterance.volume = 1;
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch { /* 浏览器不支持语音 */ }
+    }
+    setLastPendingCount(currentPending);
+  }, [pendingItems.length, voiceEnabled, lastPendingCount, dept]);
 
   // 统计
   const stats = useMemo(() => {
