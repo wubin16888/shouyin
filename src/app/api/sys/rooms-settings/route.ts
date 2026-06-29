@@ -30,6 +30,7 @@ export async function POST(req: Request) {
         roomType: b.roomType ?? "中包", area: b.area ?? null,
         capacity: Number(b.capacity ?? 6), hourlyRate: Number(b.hourlyRate ?? 38),
         minSpend: Number(b.minSpend ?? 0), billingMode: b.billingMode ?? "hourly",
+        packageId: b.billingMode === "package" ? (b.packageId ?? null) : null,
         roomIp: b.roomIp ?? null, status: "idle" },
     });
     return ok({ id: r.id });

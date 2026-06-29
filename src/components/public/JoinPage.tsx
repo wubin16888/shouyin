@@ -91,32 +91,20 @@ export function JoinPage({ storeId, joinCode, onClose }: {
                   className="bg-slate-900/60 border-slate-700 text-slate-100" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-slate-200">应聘岗位</Label>
-                <Select value={form.position} onValueChange={(v) => setForm({ ...form, position: v })}>
-                  <SelectTrigger className="bg-slate-900/60 border-slate-700 text-slate-100"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manager">经理</SelectItem>
-                    <SelectItem value="cashier">收银员</SelectItem>
-                    <SelectItem value="waiter">服务员</SelectItem>
-                    <SelectItem value="bartender">吧台</SelectItem>
-                    <SelectItem value="chef">厨房</SelectItem>
-                    <SelectItem value="marketing">营销</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-slate-200">期望权限</Label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                  <SelectTrigger className="bg-slate-900/60 border-slate-700 text-slate-100"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cashier">收银系统</SelectItem>
-                    <SelectItem value="production">出品系统</SelectItem>
-                    <SelectItem value="manager">财务查询</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label className="text-slate-200">应聘岗位</Label>
+              <Select value={form.position} onValueChange={(v) => setForm({ ...form, position: v })}>
+                <SelectTrigger className="bg-slate-900/60 border-slate-700 text-slate-100"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manager">经理</SelectItem>
+                  <SelectItem value="cashier">收银员</SelectItem>
+                  <SelectItem value="waiter">服务员</SelectItem>
+                  <SelectItem value="bartender">吧台</SelectItem>
+                  <SelectItem value="chef">厨房</SelectItem>
+                  <SelectItem value="marketing">营销</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">权限由门店管理员审核入职后在「人事」中分配</p>
             </div>
             <div>
               <Label className="text-slate-200">身份证号</Label>

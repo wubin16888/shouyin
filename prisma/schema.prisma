@@ -449,6 +449,9 @@ model Employee {
   password    String?  // 简单密码，实际应hash
   /// 是否门店管理员
   isStoreAdmin Boolean @default(false)
+  /// 细粒度权限（JSON: {login,gift,book,discount,changePrice,checkout,void,shift}）
+  /// 为空时按 role 推断默认权限：admin 全开 / cashier 收银相关 / production 出品 / manager 财务查询
+  permissions String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -688,5 +691,78 @@ model JoinApplication {
 
   @@index([storeId, status])
   @@index([joinCode])
+}
+
+// ========================================
+// 计时计费规则（开房按小时计费的费率表）
+// ========================================
+
+/// 计时计费规则（多种时段/包房类型对应不同价格）
+model BillingRule {
+  id           String   @id @default(cuid())
+  storeId      Int      @default(1001)
+  /// 规则名称：白天场/夜间场/周末场
+  name         String
+  /// 类型：hourly(按小时) / package(买N送M时段包) / fixed(固定时段价)
+  type         String   @default("hourly")
+  /// 每小时单价（type=hourly 用）
+  hourlyPrice  Float    @default(0)
+  /// 包时段小时数（type=package 用）
+  packageHours Int      @default(0)
+  /// 包时段价格（type=package 用）
+  packagePrice Float    @default(0)
+  /// 买多少小时
+  buyHours     Int      @default(0)
+  /// 送多少小时
+  giftHours    Int      @default(0)
+  /// 是否可累计叠加
+  cumulative   Boolean  @default(false)
+  /// 适用房台类型（JSON: ["小包","中包"]，空表示全部）
+  roomTypes    String?
+  /// 是否启用
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId, enabled])
+}
+
+/// 物品单位（瓶/箱/包/份/个…，管理员自定义）
+model ProductUnit {
+  id          String   @id @default(cuid())
+  storeId     Int      @default(1001)
+  name        String   // 瓶/箱/包/份/个
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+/// 交接班记录
+model Shift {
+  id             String   @id @default(cuid())
+  storeId        Int      @default(1001)
+  /// 收银员姓名
+  employeeName   String
+  /// 班次状态：active(进行中) / closed(已关闭)
+  status         String   @default("active")
+  startAt        DateTime @default(now())
+  endAt          DateTime?
+  /// 起始/结束现金
+  startCash      Float    @default(0)
+  endCash        Float    @default(0)
+  /// 营收统计
+  totalRevenue   Float    @default(0)
+  orderCount     Int      @default(0)
+  openCount      Int      @default(0)
+  /// 按支付方式汇总（JSON: {cash:123,wechat:456}）
+  revenueByMethod String?
+  remark         String?
+  createdAt      DateTime @default(now())
+
+  @@index([storeId, status])
+  @@index([storeId, startAt])
 }
 
