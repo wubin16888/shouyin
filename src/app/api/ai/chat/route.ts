@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer OPENROUTER_KEY",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
       },
       body: JSON.stringify({
         model: "deepseek/deepseek-chat",
