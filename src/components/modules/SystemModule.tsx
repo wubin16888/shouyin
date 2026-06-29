@@ -204,6 +204,44 @@ const ROLE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
   { value: "production", label: "出品员", desc: "出品看板" },
 ];
 
+// 细粒度权限点
+const PERM_POINTS: Array<{ key: string; label: string; desc: string }> = [
+  { key: "login", label: "允许登录", desc: "可登录系统" },
+  { key: "book", label: "订房/开台", desc: "开房、转房、预订" },
+  { key: "checkout", label: "买单结账", desc: "结账收银" },
+  { key: "gift", label: "赠送商品", desc: "赠送物品" },
+  { key: "discount", label: "打折", desc: "订单折扣" },
+  { key: "changePrice", label: "改价", desc: "修改商品价格" },
+  { key: "void", label: "退单", desc: "撤销订单明细" },
+  { key: "shift", label: "交接班", desc: "开关交接班" },
+];
+
+// 按 role 推断默认权限
+function defaultPermsByRole(role: string): Record<string, boolean> {
+  switch (role) {
+    case "admin":
+      return { login: true, book: true, checkout: true, gift: true, discount: true, changePrice: true, void: true, shift: true };
+    case "cashier":
+      return { login: true, book: true, checkout: true, gift: true, discount: true, changePrice: false, void: false, shift: true };
+    case "production":
+      return { login: true, book: false, checkout: false, gift: false, discount: false, changePrice: false, void: false, shift: false };
+    case "manager":
+      return { login: true, book: false, checkout: false, gift: false, discount: false, changePrice: false, void: false, shift: false };
+    default:
+      return { login: true, book: false, checkout: false, gift: false, discount: false, changePrice: false, void: false, shift: false };
+  }
+}
+
+function parsePerms(raw: string | null | undefined, role: string): Record<string, boolean> {
+  if (!raw) return defaultPermsByRole(role);
+  try {
+    const p = JSON.parse(raw);
+    return { ...defaultPermsByRole(role), ...p };
+  } catch {
+    return defaultPermsByRole(role);
+  }
+}
+
 // 打印方式
 const PRINT_MODE_OPTIONS: Array<{ value: string; label: string; desc: string }> = [
   { value: "client", label: "客户端打印", desc: "本机安装打印机驱动即可" },
@@ -1092,6 +1130,18 @@ function ProductsTab() {
     }
   };
 
+  // 沽清设置：status 2=估清(沽清) / 1=恢复在售
+  const handleSoldout = async (p: ProductInfo) => {
+    const next = p.status === 2 ? 1 : 2;
+    try {
+      await api.updateProduct({ id: p.id, status: next });
+      toast({ title: next === 2 ? "已设为沽清" : "已恢复在售", description: `${p.name} · 收银端将${next === 2 ? "不再显示" : "恢复显示"}` });
+      load();
+    } catch (e) {
+      toast({ title: "操作失败", description: String(e), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="pb-6 grid gap-4 lg:grid-cols-[300px_1fr]">
       {/* 左侧大类列表 */}
@@ -1358,6 +1408,21 @@ function ProductsTab() {
                               >
                                 {p.status === 1 ? "下架" : "上架"}
                               </Button>
+                              {p.status !== 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleSoldout(p)}
+                                  className={cn(
+                                    "h-7 px-2",
+                                    p.status === 2
+                                      ? "text-emerald-300 hover:bg-emerald-500/10"
+                                      : "text-amber-300 hover:bg-amber-500/10",
+                                  )}
+                                >
+                                  {p.status === 2 ? "恢复" : "沽清"}
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -2442,6 +2507,7 @@ interface EmployeeInfo {
   usedGiftAmount: number;
   resetMonth: number;
   status: number;
+  permissions: string | null;
   entryDate: string;
 }
 
@@ -2745,6 +2811,7 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
   const [role, setRole] = useState("cashier");
   const [discount, setDiscount] = useState(1);
   const [monthlyGiftLimit, setMonthlyGiftLimit] = useState(0);
+  const [perms, setPerms] = useState<Record<string, boolean>>(defaultPermsByRole("cashier"));
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -2758,6 +2825,7 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
         setRole(editing.role);
         setDiscount(editing.discount);
         setMonthlyGiftLimit(editing.monthlyGiftLimit);
+        setPerms(parsePerms(editing.permissions, editing.role));
       } else {
         setName("");
         setPhone("");
@@ -2766,9 +2834,20 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
         setRole("cashier");
         setDiscount(1);
         setMonthlyGiftLimit(0);
+        setPerms(defaultPermsByRole("cashier"));
       }
     }
   }, [open, editing]);
+
+  // 切换角色时重置为该角色默认权限（用户可再手动调整）
+  const handleRoleChange = (r: string) => {
+    setRole(r);
+    setPerms(defaultPermsByRole(r));
+  };
+
+  const togglePerm = (key: string) => {
+    setPerms((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const save = async () => {
     if (!name.trim()) {
@@ -2785,6 +2864,7 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
         role,
         discount: Number(discount),
         monthlyGiftLimit: Number(monthlyGiftLimit),
+        permissions: JSON.stringify(perms),
       };
       if (editing) {
         await api.saveEmployee({ id: editing.id, ...payload });
@@ -2863,7 +2943,7 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
                 return (
                   <button
                     key={r.value}
-                    onClick={() => setRole(r.value)}
+                    onClick={() => handleRoleChange(r.value)}
                     className={cn(
                       "rounded-md border-2 p-2 text-left transition-all",
                       active ? "border-emerald-500 bg-emerald-500/15" : "border-slate-700 bg-slate-800/50 hover:border-slate-600",
@@ -2871,6 +2951,35 @@ function EmployeeDialog({ open, editing, onClose, onSaved }: {
                   >
                     <div className={cn("text-sm font-medium", active ? "text-emerald-300" : "text-slate-200")}>{r.label}</div>
                     <div className="text-xs text-slate-500">{r.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* 细粒度权限点 */}
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-slate-400">功能权限</Label>
+              <span className="text-[10px] text-slate-500">切换角色会重置为默认，可逐项调整</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 mt-1">
+              {PERM_POINTS.map((p) => {
+                const on = !!perms[p.key];
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => togglePerm(p.key)}
+                    className={cn(
+                      "flex items-center justify-between rounded-md border px-2.5 py-1.5 text-left transition-all",
+                      on ? "border-emerald-500/50 bg-emerald-500/10" : "border-slate-700 bg-slate-800/40",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className={cn("text-xs font-medium truncate", on ? "text-emerald-300" : "text-slate-300")}>{p.label}</div>
+                      <div className="text-[10px] text-slate-500 truncate">{p.desc}</div>
+                    </div>
+                    <Switch checked={on} className="data-[state=checked]:bg-emerald-600 scale-90" />
                   </button>
                 );
               })}

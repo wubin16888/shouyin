@@ -14,7 +14,7 @@ export async function GET(req: Request) {
       id: e.id, name: e.name, phone: e.phone, position: e.position,
       department: e.department, role: e.role, discount: e.discount,
       monthlyGiftLimit: e.monthlyGiftLimit, usedGiftAmount: e.usedGiftAmount,
-      resetMonth: e.resetMonth, status: e.status,
+      resetMonth: e.resetMonth, status: e.status, permissions: e.permissions,
       entryDate: e.entryDate.toISOString(),
     })));
   } catch (e) {
@@ -32,6 +32,7 @@ export async function POST(req: Request) {
         position: b.position ?? "waiter", department: b.department ?? null,
         role: b.role ?? "cashier", discount: Number(b.discount ?? 1),
         monthlyGiftLimit: Number(b.monthlyGiftLimit ?? 0), usedGiftAmount: 0,
+        permissions: b.permissions ?? null,
         resetMonth: now.getMonth() + 1, status: 1 },
     });
     return ok({ id: e.id });
