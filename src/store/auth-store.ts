@@ -12,6 +12,7 @@ export interface AuthUser {
   role: string;
   position: string;
   isStoreAdmin: boolean;
+  userType: "cloud_admin" | "store_admin" | "employee";
   storeId: number;
   storeName: string;
   discount: number;
