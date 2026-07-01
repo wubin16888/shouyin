@@ -23,7 +23,7 @@ export async function GET(req: Request) {
         id: p.id, storeId: p.storeId, name: p.name,
         categoryId: p.categoryId, categoryName: p.category.name,
         subcategoryId: p.subcategoryId, subcategoryName: p.subcategory?.name ?? null,
-        price: p.price, cost: p.cost, stock: p.stock, barcode: p.barcode,
+        price: p.price, roomPrice: p.roomPrice, hallPrice: p.hallPrice, memberPrice: p.memberPrice, costPrice: p.costPrice, unit: p.unit, sortOrder: p.sortOrder, cost: p.cost, stock: p.stock, barcode: p.barcode,
         imageUrl: p.imageUrl, outputDept: p.outputDept, isPackage: p.isPackage,
         countToMinSpend: p.countToMinSpend, packagePrice: p.packagePrice,
         packageItems: p.packageItems,
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         name: body.name,
         categoryId: body.categoryId,
         subcategoryId: body.subcategoryId ?? null,
-        price: Number(body.price),
+        price: Number(body.price), roomPrice: Number(body.roomPrice ?? body.price), hallPrice: Number(body.hallPrice ?? body.price), memberPrice: Number(body.memberPrice ?? body.price), costPrice: Number(body.costPrice ?? 0), unit: body.unit ?? "份", sortOrder: Number(body.sortOrder ?? 0),
         cost: Number(body.cost ?? 0),
         stock: Number(body.stock ?? 0),
         barcode: body.barcode ?? null,
@@ -77,10 +77,10 @@ export async function PUT(req: Request) {
     const { id, flavorCategoryIds, ...data } = body;
     if (!id) return fail("缺少 id");
     const update: any = {};
-    for (const k of ["name", "categoryId", "subcategoryId", "barcode", "imageUrl", "outputDept", "pinyin"]) {
+    for (const k of ["name", "categoryId", "subcategoryId", "barcode", "imageUrl", "outputDept", "pinyin", "unit"]) {
       if (data[k] !== undefined) update[k] = data[k];
     }
-    for (const k of ["price", "cost", "stock"]) {
+    for (const k of ["price", "cost", "stock", "roomPrice", "hallPrice", "memberPrice", "costPrice", "sortOrder"]) {
       if (data[k] !== undefined) update[k] = Number(data[k]);
     }
     if (data.isPackage !== undefined) update.isPackage = !!data.isPackage;
