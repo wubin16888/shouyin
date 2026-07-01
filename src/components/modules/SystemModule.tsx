@@ -1325,9 +1325,24 @@ function ProductsTab() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
-              <RefreshCw className="h-3.5 w-3.5" /> 刷新
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
+" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
+");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "物品列表.csv";
+                link.click();
+              }} className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-9">导出</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">日志</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">排序</Button>
+              <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1 h-9">
+                <RefreshCw className="h-3.5 w-3.5" /> 刷新
+              </Button>
+            </div>
             {selectedCategory && (
               <Button
                 onClick={() => setAddingProductTo(selectedCategory)}
@@ -2135,9 +2150,24 @@ function FlavorsTab() {
           共 {flavors.length} 个口味分类，{flavors.reduce((s, f) => s + f.flavors.length, 0)} 个口味选项
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
-            <RefreshCw className="h-3.5 w-3.5" /> 刷新
-          </Button>
+          <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
+" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
+");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "物品列表.csv";
+                link.click();
+              }} className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-9">导出</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">日志</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">排序</Button>
+              <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1 h-9">
+                <RefreshCw className="h-3.5 w-3.5" /> 刷新
+              </Button>
+            </div>
           <Button onClick={() => setAdding(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
             <Plus className="h-4 w-4" /> 新建口味分类
           </Button>
@@ -2351,9 +2381,24 @@ function GiftRulesTab() {
           共 {rules.length} 条规则，{rules.filter((r) => r.enabled).length} 条启用中
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
-            <RefreshCw className="h-3.5 w-3.5" /> 刷新
-          </Button>
+          <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
+" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
+");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "物品列表.csv";
+                link.click();
+              }} className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-9">导出</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">日志</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">排序</Button>
+              <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1 h-9">
+                <RefreshCw className="h-3.5 w-3.5" /> 刷新
+              </Button>
+            </div>
           <Button onClick={() => setAdding(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
             <Plus className="h-4 w-4" /> 新建规则
           </Button>
@@ -4083,9 +4128,24 @@ function ThemesTab() {
             <Button onClick={() => setCreateOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 gap-1">
               <Plus className="h-4 w-4" /> 创建模板
             </Button>
-            <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1">
-              <RefreshCw className="h-3.5 w-3.5" /> 刷新
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
+" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
+");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "物品列表.csv";
+                link.click();
+              }} className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-9">导出</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">日志</Button>
+              <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">排序</Button>
+              <Button variant="ghost" onClick={load} className="text-slate-300 hover:bg-slate-700/50 gap-1 h-9">
+                <RefreshCw className="h-3.5 w-3.5" /> 刷新
+              </Button>
+            </div>
           </div>
         </div>
 
