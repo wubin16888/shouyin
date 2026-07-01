@@ -1071,6 +1071,7 @@ function ProductsTab() {
   const [loading, setLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState<string>("");
   const [keyword, setKeyword] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [editingProduct, setEditingProduct] = useState<ProductInfo | null>(null);
   const [addingCategory, setAddingCategory] = useState(false);
@@ -1101,7 +1102,7 @@ function ProductsTab() {
       if (deptFilter !== "all" && p.outputDept !== deptFilter) return false;
       if (keyword && !p.name.toLowerCase().includes(keyword.toLowerCase())) return false;
       return true;
-    });
+    }).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }, [products, selectedCat, deptFilter, keyword]);
 
   const selectedCategory = useMemo(
@@ -1131,6 +1132,44 @@ function ProductsTab() {
   };
 
   // 沽清设置：status 2=估清(沽清) / 1=恢复在售
+  
+  const handleBatchStatus = async (status: number) => {
+    if (selectedIds.length === 0) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.updateProduct({ id, status })));
+      toast({ title: "批量操作成功", description: `已更新 ${selectedIds.length} 个物品的状态` });
+      setSelectedIds([]);
+      load();
+    } catch (e) {
+      toast({ title: "批量操作失败", description: String(e), variant: "destructive" });
+    }
+  };
+
+  const handleExport = () => {
+    const data = filteredProducts.map(p => ({
+      "名称": p.name,
+      "单位": p.unit,
+      "包房价": p.roomPrice,
+      "大厅价": p.hallPrice,
+      "会员价": p.memberPrice,
+      "成本价": p.costPrice,
+      "库存": p.stock,
+      "排序": p.sortOrder,
+      "部门": p.outputDept
+    }));
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      "﻿" + // UTF-8 BOM
+      "名称,单位,包房价,大厅价,会员价,成本价,库存,排序,部门\n" + 
+      data.map(r => Object.values(r).join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "物品导出.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleSoldout = async (p: ProductInfo) => {
     const next = p.status === 2 ? 1 : 2;
     try {
@@ -1321,6 +1360,18 @@ function ProductsTab() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-800/80 sticky top-0 backdrop-blur z-10">
                     <tr className="text-left text-slate-400 text-xs">
+                      <th className="px-3 py-2 w-10">
+                        <input 
+                          type="checkbox" 
+                          className="h-3.5 w-3.5 accent-emerald-500" 
+                          checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedIds(filteredProducts.map(p => p.id));
+                            else setSelectedIds([]);
+                          }}
+                        />
+                      </th>
+                      <th className="px-3 py-2 font-medium w-12">序号</th>
                       <th className="px-3 py-2 font-medium">物品</th>
                       <th className="px-3 py-2 font-medium">出品部门</th>
                       <th className="px-3 py-2 font-medium text-right">价格</th>
@@ -1338,6 +1389,18 @@ function ProductsTab() {
                       const status = PRODUCT_STATUS[p.status] ?? PRODUCT_STATUS[1];
                       return (
                         <tr key={p.id} className="border-t border-slate-700/40 hover:bg-slate-800/50 transition-colors">
+                          <td className="px-3 py-2.5">
+                            <input 
+                              type="checkbox" 
+                              className="h-3.5 w-3.5 accent-emerald-500" 
+                              checked={selectedIds.includes(p.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedIds([...selectedIds, p.id]);
+                                else setSelectedIds(selectedIds.filter(id => id !== p.id));
+                              }}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-500 text-xs">{p.sortOrder || 0}</td>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-2">
                               {/* 商品缩略图 32x32（无图隐藏） */}
@@ -1369,7 +1432,7 @@ function ProductsTab() {
                             <InlineEdit
                               value={p.price}
                               onSave={(v) => handleQuickUpdate(p, "price", v)}
-                              format={(v) => `¥${v.toFixed(2)}`}
+                              format={(v) => `包:¥${v.toFixed(2)}`}
                             />
                           </td>
                           <td className="px-3 py-2.5 text-center hidden sm:table-cell">
@@ -1636,23 +1699,36 @@ function ProductFormFields({
 
   return (
     <div className="py-2 space-y-3">
-      <div>
-        <Label className="text-xs text-slate-400">物品名称</Label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
-        />
+      <div className="grid grid-cols-4 gap-3">
+        <div className="col-span-2">
+          <Label className="text-xs text-slate-400">物品名称</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-400">单位</Label>
+          <Input value={unit} onChange={(e) => setUnit(e.target.value)} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" placeholder="份/瓶/打" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-400">显示序号</Label>
+          <Input type="number" value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <Label className="text-xs text-slate-400">单价 ¥</Label>
-          <Input
-            type="number"
-            value={price}
-            onChange={(e) => setPrice(Number(e.target.value))}
-            className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1"
-          />
+          <Label className="text-xs text-slate-400">包房价 ¥</Label>
+          <Input type="number" value={roomPrice} onChange={(e) => setRoomPrice(Number(e.target.value))} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-400">大厅价 ¥</Label>
+          <Input type="number" value={hallPrice} onChange={(e) => setHallPrice(Number(e.target.value))} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-400">会员价 ¥</Label>
+          <Input type="number" value={memberPrice} onChange={(e) => setMemberPrice(Number(e.target.value))} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs text-slate-400">成本价 ¥</Label>
+          <Input type="number" value={costPrice} onChange={(e) => setCostPrice(Number(e.target.value))} className="bg-slate-800/60 border-slate-700 text-slate-100 mt-1" />
         </div>
         <div>
           <Label className="text-xs text-slate-400">库存</Label>

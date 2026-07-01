@@ -139,6 +139,12 @@ export interface DishInfo {
   name: string;
   category: string;
   price: number;
+  roomPrice: number;
+  hallPrice: number;
+  memberPrice: number;
+  costPrice: number;
+  unit: string;
+  sortOrder: number;
   status: number;
   imageUrl: string | null;
 }
@@ -244,6 +250,12 @@ export interface KtvProductInfo {
   name: string;
   category: string;
   price: number;
+  roomPrice: number;
+  hallPrice: number;
+  memberPrice: number;
+  costPrice: number;
+  unit: string;
+  sortOrder: number;
   cost: number;
   stock: number;
   barcode: string | null;
@@ -256,6 +268,12 @@ export interface KtvOrderItemInfo {
   productId: string;
   productName: string;
   price: number;
+  roomPrice: number;
+  hallPrice: number;
+  memberPrice: number;
+  costPrice: number;
+  unit: string;
+  sortOrder: number;
   qty: number;
   status: "pending" | "delivered" | "cancelled";
   deliveredAt: string | null;
@@ -386,6 +404,12 @@ export interface ProductInfo {
   subcategoryId: string | null;
   subcategoryName: string | null;
   price: number;
+  roomPrice: number;
+  hallPrice: number;
+  memberPrice: number;
+  costPrice: number;
+  unit: string;
+  sortOrder: number;
   cost: number;
   stock: number;
   barcode: string | null;

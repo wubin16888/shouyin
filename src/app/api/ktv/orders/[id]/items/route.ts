@@ -36,7 +36,7 @@ export async function POST(
     for (const it of items) {
       const product = await db.product.findUnique({ where: { id: it.productId } });
       if (!product) continue;
-      if (product.stock < it.qty) return fail(`${product.name} 库存不足（剩 ${product.stock}）`);
+      // 移除库存限制：if (product.stock < it.qty) return fail(`${product.name} 库存不足（剩 ${product.stock}）`);
 
       // 套餐：主项价格=packagePrice（兼容 seed 未设的情况，回退到 price）
       const isPkg = product.isPackage;
@@ -102,7 +102,7 @@ export async function POST(
                 },
               });
               // 子项库存按实际消耗扣减
-              if (sub.stock >= subQty) {
+              if (true) { // 移除库存限制
                 await db.product.update({
                   where: { id: sub.id },
                   data: { stock: { decrement: subQty } },

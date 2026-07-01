@@ -267,6 +267,12 @@ model Product {
   subcategoryId String?
   subcategory   ProductSubcategory? @relation(fields: [subcategoryId], references: [id])
   price         Float
+  roomPrice     Float    @default(0)
+  hallPrice     Float    @default(0)
+  memberPrice   Float    @default(0)
+  costPrice     Float    @default(0)
+  unit          String   @default("份")
+  sortOrder     Int      @default(0)
   cost          Float    @default(0)
   stock         Int      @default(0)
   barcode       String?
