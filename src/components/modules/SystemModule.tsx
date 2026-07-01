@@ -1328,9 +1328,7 @@ function ProductsTab() {
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
               <Button variant="outline" size="sm" onClick={() => {
-                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
-" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
-");
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价\n" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("\n");
                 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
@@ -2153,9 +2151,7 @@ function FlavorsTab() {
           <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
               <Button variant="outline" size="sm" onClick={() => {
-                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
-" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
-");
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价\n" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("\n");
                 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
@@ -2384,9 +2380,7 @@ function GiftRulesTab() {
           <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
               <Button variant="outline" size="sm" onClick={() => {
-                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
-" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
-");
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价\n" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("\n");
                 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
@@ -4131,9 +4125,7 @@ function ThemesTab() {
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700 h-9">批量修改</Button>
               <Button variant="outline" size="sm" onClick={() => {
-                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价
-" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("
-");
+                const csv = "物品名称,单位,包房价,大厅价,会员价,成本价\n" + filteredProducts.map(p => `${p.name},${p.unit || "份"},${p.roomPrice ?? p.price},${p.hallPrice ?? p.price},${p.memberPrice ?? p.price},${p.costPrice ?? 0}`).join("\n");
                 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
