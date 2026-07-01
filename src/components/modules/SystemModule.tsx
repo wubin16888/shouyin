@@ -1655,6 +1655,12 @@ function parsePackageItems(raw: string | null): Array<{ productId: string; name:
 function ProductFormFields({
   name, setName,
   price, setPrice,
+  roomPrice, setRoomPrice,
+  hallPrice, setHallPrice,
+  memberPrice, setMemberPrice,
+  costPrice, setCostPrice,
+  unit, setUnit,
+  sortOrder, setSortOrder,
   stock, setStock,
   status, setStatus,
   outputDept, setOutputDept,
@@ -1667,6 +1673,12 @@ function ProductFormFields({
 }: {
   name: string; setName: (v: string) => void;
   price: number; setPrice: (v: number) => void;
+  roomPrice: number; setRoomPrice: (v: number) => void;
+  hallPrice: number; setHallPrice: (v: number) => void;
+  memberPrice: number; setMemberPrice: (v: number) => void;
+  costPrice: number; setCostPrice: (v: number) => void;
+  unit: string; setUnit: (v: string) => void;
+  sortOrder: number; setSortOrder: (v: number) => void;
   stock: number; setStock: (v: number) => void;
   status: number; setStatus: (v: number) => void;
   outputDept: string; setOutputDept: (v: string) => void;
@@ -1878,6 +1890,12 @@ function AddProductDialog({ category, allProducts, categories, onClose, onSaved 
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState(0);
+  const [roomPrice, setRoomPrice] = useState(0);
+  const [hallPrice, setHallPrice] = useState(0);
+  const [memberPrice, setMemberPrice] = useState(0);
+  const [costPrice, setCostPrice] = useState(0);
+  const [unit, setUnit] = useState("份");
+  const [sortOrder, setSortOrder] = useState(0);
   const [stock, setStock] = useState(0);
   const [status, setStatus] = useState(1);
   const [outputDept, setOutputDept] = useState("bar");
@@ -1939,6 +1957,12 @@ function AddProductDialog({ category, allProducts, categories, onClose, onSaved 
         <ProductFormFields
           name={name} setName={setName}
           price={price} setPrice={setPrice}
+          roomPrice={roomPrice} setRoomPrice={setRoomPrice}
+          hallPrice={hallPrice} setHallPrice={setHallPrice}
+          memberPrice={memberPrice} setMemberPrice={setMemberPrice}
+          costPrice={costPrice} setCostPrice={setCostPrice}
+          unit={unit} setUnit={setUnit}
+          sortOrder={sortOrder} setSortOrder={setSortOrder}
           stock={stock} setStock={setStock}
           status={status} setStatus={setStatus}
           outputDept={outputDept} setOutputDept={setOutputDept}
@@ -1968,6 +1992,12 @@ function EditProductDialog({ product, allProducts, categories, onClose, onSaved 
   onSaved: () => void;
 }) {
   const [price, setPrice] = useState(0);
+  const [roomPrice, setRoomPrice] = useState(0);
+  const [hallPrice, setHallPrice] = useState(0);
+  const [memberPrice, setMemberPrice] = useState(0);
+  const [costPrice, setCostPrice] = useState(0);
+  const [unit, setUnit] = useState("份");
+  const [sortOrder, setSortOrder] = useState(0);
   const [stock, setStock] = useState(0);
   const [status, setStatus] = useState(1);
   const [outputDept, setOutputDept] = useState("bar");
@@ -1982,6 +2012,12 @@ function EditProductDialog({ product, allProducts, categories, onClose, onSaved 
   useEffect(() => {
     if (product) {
       setPrice(product.price);
+      setRoomPrice(product.roomPrice ?? product.price);
+      setHallPrice(product.hallPrice ?? product.price);
+      setMemberPrice(product.memberPrice ?? product.price);
+      setCostPrice(product.costPrice ?? 0);
+      setUnit(product.unit ?? "份");
+      setSortOrder(product.sortOrder ?? 0);
       setStock(product.stock);
       setStatus(product.status);
       setOutputDept(product.outputDept);
@@ -2000,7 +2036,13 @@ function EditProductDialog({ product, allProducts, categories, onClose, onSaved 
       await api.updateProduct({
         id: product.id,
         name,
-        price: Number(price),
+        price: Number(roomPrice),
+        roomPrice: Number(roomPrice),
+        hallPrice: Number(hallPrice),
+        memberPrice: Number(memberPrice),
+        costPrice: Number(costPrice),
+        unit,
+        sortOrder: Number(sortOrder),
         stock: Number(stock),
         status: Number(status),
         outputDept,
@@ -2030,6 +2072,12 @@ function EditProductDialog({ product, allProducts, categories, onClose, onSaved 
         <ProductFormFields
           name={name} setName={setName}
           price={price} setPrice={setPrice}
+          roomPrice={roomPrice} setRoomPrice={setRoomPrice}
+          hallPrice={hallPrice} setHallPrice={setHallPrice}
+          memberPrice={memberPrice} setMemberPrice={setMemberPrice}
+          costPrice={costPrice} setCostPrice={setCostPrice}
+          unit={unit} setUnit={setUnit}
+          sortOrder={sortOrder} setSortOrder={setSortOrder}
           stock={stock} setStock={setStock}
           status={status} setStatus={setStatus}
           outputDept={outputDept} setOutputDept={setOutputDept}
